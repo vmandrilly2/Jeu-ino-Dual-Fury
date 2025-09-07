@@ -51,11 +51,15 @@ class Game:
                 elif menu_action == 'quit':
                     self.running = False
                     
-            elif self.game_manager.game_state == GAME_STATE_SKILL_SELECTION:
-                selected_skill = self.skill_selection_ui.handle_input(event)
-                if selected_skill:
-                    self.game_manager.complete_skill_selection(selected_skill)
-                    self.skill_selection_ui.hide()
+            # Handle skill selection (can happen during gameplay)
+            if (self.game_manager.game_state == GAME_STATE_PLAYING and 
+                (self.skill_selection_ui.player1_selection['active'] or 
+                 self.skill_selection_ui.player2_selection['active'])):
+                selection_result = self.skill_selection_ui.handle_input(event)
+                if selection_result:
+                    player_id = self.game_manager.complete_skill_selection(selection_result)
+                    if player_id:
+                        self.skill_selection_ui.hide(player_id)
                     
             elif self.game_manager.game_state == GAME_STATE_GAME_OVER:
                 if event.type == pygame.KEYDOWN:
@@ -64,6 +68,8 @@ class Game:
                     elif event.key == pygame.K_ESCAPE:
                         self.game_manager.game_state = GAME_STATE_MENU
                         
+            # No mouse shooting needed - Q/K keys handle both melee and shooting
+                        
             # Global controls
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
@@ -71,6 +77,9 @@ class Game:
                         self.game_manager.game_state = GAME_STATE_MENU
                     elif self.game_manager.game_state == GAME_STATE_MENU:
                         self.running = False
+                elif event.key == pygame.K_l:
+                    # Toggle language
+                    toggle_language()
                         
     def start_new_game(self):
         """Start a new game"""
@@ -81,11 +90,11 @@ class Game:
     def update(self, dt):
         """Update game state"""
         if self.game_manager.game_state == GAME_STATE_PLAYING:
-            # Update players
+            # Update players with enemies list for targeting
             keys_pressed = pygame.key.get_pressed()
             for i, player in enumerate(self.players):
                 other_player = self.players[1 - i] if len(self.players) > 1 else None
-                player.update(dt, keys_pressed, other_player)
+                player.update(dt, keys_pressed, other_player, self.game_manager.enemies)
                 
             # Update game manager
             self.game_manager.update(dt, self.players)
@@ -94,9 +103,8 @@ class Game:
             self.particle_system.update(dt)
             
             # Check for skill selection trigger
-            if self.game_manager.game_state == GAME_STATE_SKILL_SELECTION:
-                if self.game_manager.skill_selection_player:
-                    self.skill_selection_ui.show(self.game_manager.skill_selection_player)
+            if self.game_manager.skill_selection_player:
+                self.skill_selection_ui.show(self.game_manager.skill_selection_player)
                     
     def draw(self):
         """Draw everything"""
@@ -105,7 +113,7 @@ class Game:
         if self.game_manager.game_state == GAME_STATE_MENU:
             self.main_menu.draw(self.screen)
             
-        elif self.game_manager.game_state in [GAME_STATE_PLAYING, GAME_STATE_SKILL_SELECTION]:
+        elif self.game_manager.game_state == GAME_STATE_PLAYING:
             # Draw game world
             self.draw_game_world()
             
@@ -117,9 +125,8 @@ class Game:
                     self.game_manager.get_wave_break_time_remaining()
                 )
                 
-            # Draw skill selection UI
-            if self.game_manager.game_state == GAME_STATE_SKILL_SELECTION:
-                self.skill_selection_ui.draw(self.screen)
+            # Draw skill selection UI (can appear during gameplay)
+            self.skill_selection_ui.draw(self.screen)
                 
         elif self.game_manager.game_state == GAME_STATE_GAME_OVER:
             # Draw game world (faded)
@@ -132,30 +139,49 @@ class Game:
         
     def draw_game_world(self):
         """Draw the main game world"""
+        # Get screen shake offset
+        shake_x, shake_y = self.game_manager.get_screen_shake_offset()
+        
+        # Create a surface for the game world with shake offset
+        if shake_x != 0 or shake_y != 0:
+            # Create temporary surface for shaking
+            temp_surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
+            temp_surface.fill(BLACK)
+            self._draw_world_content(temp_surface)
+            self.screen.blit(temp_surface, (shake_x, shake_y))
+        else:
+            self._draw_world_content(self.screen)
+            
+    def _draw_world_content(self, surface):
+        """Draw the actual game world content"""
         # Draw background grid (optional)
-        self.draw_background_grid()
+        self.draw_background_grid_on_surface(surface)
         
         # Draw XP orbs
         for orb in self.game_manager.xp_orbs:
-            orb.draw(self.screen)
+            orb.draw(surface)
             
         # Draw enemies
         for enemy in self.game_manager.enemies:
-            enemy.draw(self.screen)
+            enemy.draw(surface)
             
         # Draw players
         for player in self.players:
             if player.is_alive:
-                player.draw(self.screen)
+                player.draw(surface)
             else:
                 # Draw dead player with transparency
                 dead_surface = pygame.Surface((PLAYER_SIZE, PLAYER_SIZE))
                 dead_surface.fill(GRAY)
                 dead_surface.set_alpha(100)
-                self.screen.blit(dead_surface, player.rect)
+                surface.blit(dead_surface, player.rect)
                 
         # Draw particles
-        self.particle_system.draw(self.screen)
+        self.particle_system.draw(surface)
+        
+        # Draw damage numbers
+        for damage_number in self.game_manager.damage_numbers:
+            damage_number.draw(surface)
         
         # Draw UI
         if len(self.players) >= 1:
@@ -174,17 +200,21 @@ class Game:
         # self.game_manager.draw_debug_info(self.screen, self.ui.small_font)
         
     def draw_background_grid(self):
-        """Draw a subtle background grid"""
+        """Draw a subtle background grid on main screen"""
+        self.draw_background_grid_on_surface(self.screen)
+        
+    def draw_background_grid_on_surface(self, surface):
+        """Draw a subtle background grid on given surface"""
         grid_size = 50
         grid_color = (20, 20, 20)  # Very dark gray
         
         # Vertical lines
         for x in range(0, SCREEN_WIDTH, grid_size):
-            pygame.draw.line(self.screen, grid_color, (x, 0), (x, SCREEN_HEIGHT))
+            pygame.draw.line(surface, grid_color, (x, 0), (x, SCREEN_HEIGHT))
             
         # Horizontal lines
         for y in range(0, SCREEN_HEIGHT, grid_size):
-            pygame.draw.line(self.screen, grid_color, (0, y), (SCREEN_WIDTH, y))
+            pygame.draw.line(surface, grid_color, (0, y), (SCREEN_WIDTH, y))
             
     def run(self):
         """Main game loop"""

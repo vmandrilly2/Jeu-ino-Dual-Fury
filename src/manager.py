@@ -2,7 +2,7 @@ import pygame
 import random
 import math
 from settings import *
-from src.enemy import Enemy, FastEnemy, TankEnemy, Boss, XPOrb
+from src.enemy import Enemy, FastEnemy, TankEnemy, Boss, MajorBoss, XPOrb, DamageNumber
 
 class GameManager:
     def __init__(self):
@@ -11,6 +11,11 @@ class GameManager:
         self.wave_break_timer = 0
         self.enemies = pygame.sprite.Group()
         self.xp_orbs = pygame.sprite.Group()
+        self.damage_numbers = []  # List of floating damage numbers
+        
+        # Screen shake effect
+        self.screen_shake_timer = 0
+        self.screen_shake_intensity = 0
         
         # Game state
         self.game_state = GAME_STATE_MENU
@@ -23,6 +28,7 @@ class GameManager:
         
         # Boss tracking
         self.boss_spawned = False
+        self.major_boss_spawned = False
         
     def start_new_game(self):
         """Start a new game"""
@@ -34,17 +40,30 @@ class GameManager:
         self.game_state = GAME_STATE_PLAYING
         self.skill_selection_player = None
         self.boss_spawned = False
+        self.major_boss_spawned = False
         
     def update(self, dt, players):
         """Update game manager"""
         if self.game_state != GAME_STATE_PLAYING:
             return
             
+        # Store players reference for skill selection
+        self._players = players
+            
         # Update enemies
         self.enemies.update(dt, players)
         
         # Update XP orbs
         self.xp_orbs.update(dt, players)
+        
+        # Update damage numbers
+        self.damage_numbers = [dn for dn in self.damage_numbers if not dn.update(dt)]
+        
+        # Update screen shake
+        if self.screen_shake_timer > 0:
+            self.screen_shake_timer -= dt
+            if self.screen_shake_timer <= 0:
+                self.screen_shake_intensity = 0
         
         # Handle XP orb pickup
         self.handle_xp_pickup(players)
@@ -54,6 +73,9 @@ class GameManager:
         
         # Handle player attacks
         self.handle_player_attacks(players)
+        
+        # Handle enemy projectile collisions
+        self.handle_enemy_projectile_collisions(players)
         
         # Check if all players are dead
         if all(not player.is_alive for player in players):
@@ -78,6 +100,7 @@ class GameManager:
         """Start a new wave"""
         self.wave_active = True
         self.boss_spawned = False
+        self.major_boss_spawned = False
         
         # Calculate enemies to spawn
         base_count = WAVE_BASE_ENEMY_COUNT
@@ -88,7 +111,11 @@ class GameManager:
         if self.current_wave % BOSS_WAVE_INTERVAL == 0:
             self.enemies_to_spawn += 1  # Add one more for the boss
             
+        # Add one more enemy for the major boss that spawns at end of every wave
+        self.enemies_to_spawn += 1
+        
         self.spawn_timer = 0
+        self.enemies_per_wave = self.enemies_to_spawn  # Store for ratio calculation
         
     def update_wave_spawning(self, dt):
         """Handle enemy spawning during wave"""
@@ -129,13 +156,25 @@ class GameManager:
             # Spawn boss
             enemy = Boss(SCREEN_WIDTH // 2, -BOSS_SIZE, self.current_wave)
             self.boss_spawned = True
+        elif (self.enemies_to_spawn == 1 and not self.major_boss_spawned):
+            # Spawn major boss as the last enemy of every wave
+            enemy = MajorBoss(SCREEN_WIDTH // 2, -BOSS_SIZE - 20, self.current_wave)
+            self.major_boss_spawned = True
         else:
-            # Spawn regular enemy
-            enemy_type = random.choices(
-                [Enemy, FastEnemy, TankEnemy],
-                weights=[60, 25, 15],  # 60% normal, 25% fast, 15% tank
-                k=1
-            )[0]
+            # Spawn regular enemy with increased chance of TankEnemy towards end of wave
+            remaining_ratio = self.enemies_to_spawn / max(1, self.enemies_per_wave)
+            if remaining_ratio < 0.3:  # Last 30% of wave - more tank enemies
+                enemy_type = random.choices(
+                    [Enemy, FastEnemy, TankEnemy],
+                    weights=[40, 20, 40],  # 40% normal, 20% fast, 40% tank
+                    k=1
+                )[0]
+            else:
+                enemy_type = random.choices(
+                    [Enemy, FastEnemy, TankEnemy],
+                    weights=[60, 25, 15],  # 60% normal, 25% fast, 15% tank
+                    k=1
+                )[0]
             
             enemy = enemy_type(x, y, self.current_wave)
             
@@ -146,6 +185,16 @@ class GameManager:
         self.wave_active = False
         self.current_wave += 1
         self.wave_break_timer = WAVE_BREAK_TIME
+        
+        # Resurrect dead players if at least one teammate survived
+        if hasattr(self, '_players') and self._players:
+            alive_players = [p for p in self._players if p.is_alive]
+            dead_players = [p for p in self._players if not p.is_alive]
+            
+            # Only resurrect if there's at least one alive player and at least one dead player
+            if len(alive_players) > 0 and len(dead_players) > 0:
+                for dead_player in dead_players:
+                    dead_player.resurrect()
         
     def handle_xp_pickup(self, players):
         """Handle XP orb pickup by players"""
@@ -219,6 +268,87 @@ class GameManager:
                     if enemy_died:
                         self.handle_enemy_death(enemy, player)
                         
+            # Check projectile attacks
+            self.handle_projectile_collisions(player)
+            
+    def handle_projectile_collisions(self, player):
+        """Handle projectile collisions with enemies"""
+        if not hasattr(player, 'projectiles'):
+            return
+            
+        stats = player.get_effective_stats()
+        
+        # Convert sprite group to list for safe iteration
+        projectile_list = list(player.projectiles.sprites())
+        
+        for projectile in projectile_list:
+            # Sort enemies by distance from projectile to hit the closest one first
+            enemies_with_distance = []
+            for enemy in self.enemies:
+                dx = projectile.rect.centerx - enemy.rect.centerx
+                dy = projectile.rect.centery - enemy.rect.centery
+                distance = math.sqrt(dx*dx + dy*dy)
+                enemies_with_distance.append((distance, enemy))
+            
+            # Sort by distance (closest first)
+            enemies_with_distance.sort(key=lambda x: x[0])
+            
+            for distance, enemy in enemies_with_distance:
+                if projectile.rect.colliderect(enemy.rect):
+                    # Use projectile's damage directly (already calculated in player.py)
+                    damage = projectile.damage
+                    
+                    # Apply critical hit
+                    is_crit = random.random() < stats['crit_chance']
+                    if is_crit:
+                        damage *= stats['crit_multiplier']
+                        
+                    # Deal damage
+                    enemy_died = enemy.take_damage(damage, player)
+                    
+                    # Create floating damage number
+                    damage_color = YELLOW if is_crit else WHITE
+                    damage_number = DamageNumber(enemy.rect.centerx, enemy.rect.top - 10, damage, damage_color)
+                    self.damage_numbers.append(damage_number)
+                    
+                    # Add screen shake for impact feedback
+                    shake_intensity = 2 if is_crit else 1
+                    self.add_screen_shake(shake_intensity, 0.1)
+                    
+                    # Life steal
+                    if stats['life_steal'] > 0:
+                        heal_amount = damage * stats['life_steal']
+                        player.heal(heal_amount)
+                        
+                    # Handle enemy death
+                    if enemy_died:
+                        self.handle_enemy_death(enemy, player)
+                        
+                    # Handle piercing
+                    if hasattr(projectile, 'piercing') and projectile.piercing > 0:
+                        projectile.piercing -= 1
+                    else:
+                        # Remove projectile from sprite group and kill it
+                        player.projectiles.remove(projectile)
+                        projectile.kill()
+                        break
+            
+
+                        
+    def handle_enemy_projectile_collisions(self, players):
+        """Handle collisions between enemy projectiles and players"""
+        for enemy in self.enemies:
+            for projectile in enemy.projectiles[:]:
+                for player in players:
+                    if player.is_alive and projectile.collides_with_player(player):
+                        # Player takes damage from projectile
+                        if player.take_damage(projectile.damage):
+                            pass  # Player took damage
+                        
+                        # Remove projectile after hit
+                        enemy.projectiles.remove(projectile)
+                        break
+                        
     def handle_enemy_death(self, enemy, killer_player):
         """Handle enemy death and XP drop"""
         # Create XP orb
@@ -230,16 +360,24 @@ class GameManager:
         
     def trigger_skill_selection(self, player):
         """Trigger skill selection for a player"""
-        self.game_state = GAME_STATE_SKILL_SELECTION
+        # Don't change game state - keep playing
         self.skill_selection_player = player
         
-    def complete_skill_selection(self, skill_name):
+    def complete_skill_selection(self, selection_data):
         """Complete skill selection"""
-        if self.skill_selection_player and skill_name:
-            self.skill_selection_player.add_skill(skill_name)
+        if selection_data and 'player_id' in selection_data and 'skill' in selection_data:
+            # Find the player by ID
+            for player in [p for p in getattr(self, '_players', []) if hasattr(p, 'player_id')]:
+                if player.player_id == selection_data['player_id']:
+                    player.add_skill(selection_data['skill'])
+                    break
             
-        self.game_state = GAME_STATE_PLAYING
-        self.skill_selection_player = None
+            # If this was the skill_selection_player, clear it
+            if (self.skill_selection_player and 
+                self.skill_selection_player.player_id == selection_data['player_id']):
+                self.skill_selection_player = None
+                
+        return selection_data['player_id'] if selection_data else None
         
     def get_enemies_remaining(self):
         """Get number of enemies remaining in current wave"""
@@ -269,6 +407,21 @@ class GameManager:
             screen.blit(text_surface, (10, y))
             y += 20
             
+    def add_screen_shake(self, intensity, duration):
+        """Add screen shake effect"""
+        self.screen_shake_intensity = max(self.screen_shake_intensity, intensity)
+        self.screen_shake_timer = max(self.screen_shake_timer, duration)
+        
+    def get_screen_shake_offset(self):
+        """Get current screen shake offset"""
+        if self.screen_shake_timer <= 0:
+            return (0, 0)
+        
+        import random
+        shake_x = random.randint(-int(self.screen_shake_intensity), int(self.screen_shake_intensity))
+        shake_y = random.randint(-int(self.screen_shake_intensity), int(self.screen_shake_intensity))
+        return (shake_x, shake_y)
+    
     def reset_game(self):
         """Reset game to initial state"""
         self.__init__()

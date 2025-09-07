@@ -2,11 +2,36 @@ import pygame
 import random
 from settings import *
 
+def get_text(key):
+    """Get translated text based on current language"""
+    return TRANSLATIONS[CURRENT_LANGUAGE].get(key, key)
+
+def get_skill_name(skill_key):
+    """Get translated skill name"""
+    skill = SKILLS.get(skill_key, {})
+    if CURRENT_LANGUAGE == 'zh' and 'name_zh' in skill:
+        return skill['name_zh']
+    return skill.get('name', skill_key)
+
+def get_skill_description(skill_key):
+    """Get translated skill description"""
+    skill = SKILLS.get(skill_key, {})
+    if CURRENT_LANGUAGE == 'zh' and 'description_zh' in skill:
+        return skill['description_zh']
+    return skill.get('description', '')
+
 class UI:
     def __init__(self):
-        self.font = pygame.font.Font(None, UI_FONT_SIZE)
-        self.small_font = pygame.font.Font(None, UI_SMALL_FONT_SIZE)
-        self.large_font = pygame.font.Font(None, UI_LARGE_FONT_SIZE)
+        # Try to use a system font that supports Chinese characters
+        try:
+            self.font = pygame.font.SysFont('simsun,arial,helvetica', UI_FONT_SIZE)
+            self.small_font = pygame.font.SysFont('simsun,arial,helvetica', UI_SMALL_FONT_SIZE)
+            self.large_font = pygame.font.SysFont('simsun,arial,helvetica', UI_LARGE_FONT_SIZE)
+        except:
+            # Fallback to default font
+            self.font = pygame.font.Font(None, UI_FONT_SIZE)
+            self.small_font = pygame.font.Font(None, UI_SMALL_FONT_SIZE)
+            self.large_font = pygame.font.Font(None, UI_LARGE_FONT_SIZE)
         
     def draw_player_hud(self, screen, player, position='left'):
         """Draw HUD for a player (health, XP, level)"""
@@ -18,7 +43,7 @@ class UI:
             y = UI_MARGIN
             
         # Player label
-        label = f"Player {player.player_id}"
+        label = f"{get_text('player')} {player.player_id}"
         label_surface = self.font.render(label, True, WHITE)
         screen.blit(label_surface, (x, y))
         y += 30
@@ -32,21 +57,21 @@ class UI:
         y += 30
         
         # Level
-        level_text = f"Level: {player.level}"
+        level_text = f"{get_text('level')}: {player.level}"
         level_surface = self.font.render(level_text, True, WHITE)
         screen.blit(level_surface, (x, y))
         
         # Skills (show active skills)
         y += 30
         if player.skills:
-            skills_text = "Skills:"
+            skills_text = f"{get_text('skills')}:"
             skills_surface = self.small_font.render(skills_text, True, WHITE)
             screen.blit(skills_surface, (x, y))
             y += 20
             
             for skill_name, level in list(player.skills.items())[:5]:  # Show max 5 skills
                 if skill_name in SKILLS:
-                    skill_display = f"{SKILLS[skill_name]['name']} ({level})"
+                    skill_display = f"{get_skill_name(skill_name)} ({level})"
                     skill_surface = self.small_font.render(skill_display, True, YELLOW)
                     screen.blit(skill_surface, (x, y))
                     y += 18
@@ -91,13 +116,13 @@ class UI:
         
     def draw_wave_info(self, screen, current_wave, enemies_remaining=0):
         """Draw current wave information"""
-        wave_text = f"Wave {current_wave}"
+        wave_text = f"{get_text('wave')} {current_wave}"
         wave_surface = self.large_font.render(wave_text, True, WHITE)
         wave_rect = wave_surface.get_rect(center=(SCREEN_WIDTH // 2, 50))
         screen.blit(wave_surface, wave_rect)
         
         if enemies_remaining > 0:
-            enemies_text = f"Enemies: {enemies_remaining}"
+            enemies_text = f"{get_text('enemies')}: {enemies_remaining}"
             enemies_surface = self.font.render(enemies_text, True, WHITE)
             enemies_rect = enemies_surface.get_rect(center=(SCREEN_WIDTH // 2, 80))
             screen.blit(enemies_surface, enemies_rect)
@@ -111,19 +136,19 @@ class UI:
         screen.blit(overlay, (0, 0))
         
         # Game Over text
-        game_over_text = "GAME OVER"
+        game_over_text = get_text('game_over').upper()
         game_over_surface = self.large_font.render(game_over_text, True, RED)
         game_over_rect = game_over_surface.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 100))
         screen.blit(game_over_surface, game_over_rect)
         
         # Final stats
-        wave_text = f"Final Wave: {final_wave}"
+        wave_text = f"{get_text('final_wave')}: {final_wave}"
         wave_surface = self.font.render(wave_text, True, WHITE)
         wave_rect = wave_surface.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 50))
         screen.blit(wave_surface, wave_rect)
         
         # Instructions
-        restart_text = "Press R to restart or ESC to quit"
+        restart_text = "Press R to restart or ESC to quit"  # Keep English for key instructions
         restart_surface = self.font.render(restart_text, True, WHITE)
         restart_rect = restart_surface.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 50))
         screen.blit(restart_surface, restart_rect)
@@ -137,19 +162,19 @@ class UI:
         screen.blit(overlay, (0, 0))
         
         # Wave complete text
-        complete_text = "Wave Complete!"
+        complete_text = f"{get_text('wave_break')}!"
         complete_surface = self.large_font.render(complete_text, True, GREEN)
         complete_rect = complete_surface.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 50))
         screen.blit(complete_surface, complete_rect)
         
         # Next wave countdown
-        countdown_text = f"Next wave in {int(time_remaining) + 1} seconds"
+        countdown_text = f"{get_text('next_wave')} {int(time_remaining) + 1}s"
         countdown_surface = self.font.render(countdown_text, True, WHITE)
         countdown_rect = countdown_surface.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2))
         screen.blit(countdown_surface, countdown_rect)
         
         # Next wave number
-        next_text = f"Wave {next_wave}"
+        next_text = f"{get_text('wave')} {next_wave}"
         next_surface = self.font.render(next_text, True, YELLOW)
         next_rect = next_surface.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 30))
         screen.blit(next_surface, next_rect)
@@ -157,142 +182,215 @@ class UI:
 
 class SkillSelectionUI:
     def __init__(self):
-        self.font = pygame.font.Font(None, UI_FONT_SIZE)
-        self.small_font = pygame.font.Font(None, UI_SMALL_FONT_SIZE)
-        self.large_font = pygame.font.Font(None, UI_LARGE_FONT_SIZE)
+        # Try to use a system font that supports Chinese characters
+        try:
+            self.font = pygame.font.SysFont('simsun,arial,helvetica', UI_FONT_SIZE)
+            self.small_font = pygame.font.SysFont('simsun,arial,helvetica', UI_SMALL_FONT_SIZE)
+            self.large_font = pygame.font.SysFont('simsun,arial,helvetica', UI_LARGE_FONT_SIZE)
+        except:
+            # Fallback to default font
+            self.font = pygame.font.Font(None, UI_FONT_SIZE)
+            self.small_font = pygame.font.Font(None, UI_SMALL_FONT_SIZE)
+            self.large_font = pygame.font.Font(None, UI_LARGE_FONT_SIZE)
         
-        self.active = False
-        self.player = None
-        self.skill_options = []
-        self.selected_option = 0
+        # Track active skill selections for both players
+        self.player1_selection = {'active': False, 'player': None, 'options': []}
+        self.player2_selection = {'active': False, 'player': None, 'options': []}
         
     def show(self, player):
         """Show skill selection for a player"""
-        self.active = True
-        self.player = player
-        self.selected_option = 0
-        
+        # Check if this player already has an active selection
+        if player.player_id == 1 and self.player1_selection['active']:
+            return  # Already showing selection for this player
+        elif player.player_id == 2 and self.player2_selection['active']:
+            return  # Already showing selection for this player
+            
         # Get available skills
         available_skills = player.get_available_skills()
         
         # Randomly select 3 skills
         if len(available_skills) >= 3:
-            self.skill_options = random.sample(available_skills, 3)
+            skill_options = random.sample(available_skills, 3)
         else:
-            self.skill_options = available_skills[:]
+            skill_options = available_skills[:]
             
-    def hide(self):
-        """Hide skill selection"""
-        self.active = False
-        self.player = None
-        self.skill_options = []
+        # Assign to appropriate player slot
+        if player.player_id == 1:
+            self.player1_selection = {'active': True, 'player': player, 'options': skill_options}
+        else:
+            self.player2_selection = {'active': True, 'player': player, 'options': skill_options}
+            
+    def hide(self, player_id=None):
+        """Hide skill selection for a specific player or all players"""
+        if player_id == 1 or player_id is None:
+            self.player1_selection = {'active': False, 'player': None, 'options': []}
+        if player_id == 2 or player_id is None:
+            self.player2_selection = {'active': False, 'player': None, 'options': []}
         
     def handle_input(self, event):
-        """Handle input for skill selection"""
-        if not self.active:
-            return None
-            
+        """Handle input for skill selection using number keys"""
         if event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_UP or event.key == pygame.K_w:
-                self.selected_option = (self.selected_option - 1) % len(self.skill_options)
-            elif event.key == pygame.K_DOWN or event.key == pygame.K_s:
-                self.selected_option = (self.selected_option + 1) % len(self.skill_options)
-            elif event.key == pygame.K_RETURN or event.key == pygame.K_SPACE:
-                if self.skill_options:
-                    selected_skill = self.skill_options[self.selected_option]
-                    return selected_skill
+            # Player 1 keys (left side of keyboard: 1, 2, 3)
+            if self.player1_selection['active']:
+                if event.key == pygame.K_1:
+                    return self._select_skill(1, 0)
+                elif event.key == pygame.K_2:
+                    return self._select_skill(1, 1)
+                elif event.key == pygame.K_3:
+                    return self._select_skill(1, 2)
+                    
+            # Player 2 keys (right side of keyboard: numpad 1, 2, 3 or regular keys if no numpad)
+            if self.player2_selection['active']:
+                if event.key == pygame.K_KP1 or (event.key == pygame.K_1 and not self.player1_selection['active']):
+                    return self._select_skill(2, 0)
+                elif event.key == pygame.K_KP2 or (event.key == pygame.K_2 and not self.player1_selection['active']):
+                    return self._select_skill(2, 1)
+                elif event.key == pygame.K_KP3 or (event.key == pygame.K_3 and not self.player1_selection['active']):
+                    return self._select_skill(2, 2)
                     
         return None
         
-    def draw(self, screen):
-        """Draw skill selection UI"""
-        if not self.active or not self.player:
-            return
+    def _select_skill(self, player_id, option_index):
+        """Select a skill for a player"""
+        selection = self.player1_selection if player_id == 1 else self.player2_selection
+        
+        if selection['active'] and option_index < len(selection['options']):
+            selected_skill = selection['options'][option_index]
+            return {'player_id': player_id, 'skill': selected_skill}
             
-        # Semi-transparent background
-        overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
-        overlay.set_alpha(SKILL_SELECTION_BACKGROUND_ALPHA)
-        overlay.fill(BLACK)
-        screen.blit(overlay, (0, 0))
+        return None
+        
+    def draw(self, screen):
+        """Draw skill selection UI in side panels"""
+        # Draw Player 1 selection (left side)
+        if self.player1_selection['active']:
+            self._draw_player_selection(screen, self.player1_selection, 'left')
+            
+        # Draw Player 2 selection (right side)
+        if self.player2_selection['active']:
+            self._draw_player_selection(screen, self.player2_selection, 'right')
+            
+    def _draw_player_selection(self, screen, selection, side):
+        """Draw skill selection for one player"""
+        player = selection['player']
+        options = selection['options']
+        
+        # Panel dimensions
+        panel_width = 250
+        panel_height = SCREEN_HEIGHT - 100
+        
+        if side == 'left':
+            panel_x = 20
+        else:
+            panel_x = SCREEN_WIDTH - panel_width - 20
+            
+        panel_y = 50
+        
+        # Semi-transparent panel background
+        panel_surface = pygame.Surface((panel_width, panel_height))
+        panel_surface.set_alpha(200)
+        panel_surface.fill(DARK_GRAY)
+        screen.blit(panel_surface, (panel_x, panel_y))
+        
+        # Panel border
+        pygame.draw.rect(screen, YELLOW, (panel_x, panel_y, panel_width, panel_height), 3)
         
         # Title
-        title_text = f"Player {self.player.player_id} - Choose a Skill"
-        title_surface = self.large_font.render(title_text, True, WHITE)
-        title_rect = title_surface.get_rect(center=(SCREEN_WIDTH // 2, 150))
+        title_text = f"Player {player.player_id} - Level {player.level}!"
+        title_surface = self.font.render(title_text, True, YELLOW)
+        title_rect = title_surface.get_rect(centerx=panel_x + panel_width // 2, y=panel_y + 10)
         screen.blit(title_surface, title_rect)
         
-        # Level up text
-        level_text = f"Level {self.player.level}!"
-        level_surface = self.font.render(level_text, True, YELLOW)
-        level_rect = level_surface.get_rect(center=(SCREEN_WIDTH // 2, 180))
-        screen.blit(level_surface, level_rect)
+        # Choose skill text
+        choose_text = "Choose Skill:"
+        choose_surface = self.small_font.render(choose_text, True, WHITE)
+        choose_rect = choose_surface.get_rect(centerx=panel_x + panel_width // 2, y=panel_y + 40)
+        screen.blit(choose_surface, choose_rect)
         
         # Skill options
-        start_y = 250
-        for i, skill_name in enumerate(self.skill_options):
+        option_height = 80
+        option_spacing = 10
+        start_y = panel_y + 80
+        
+        for i, skill_name in enumerate(options):
             if skill_name in SKILLS:
                 skill_data = SKILLS[skill_name]
                 
                 # Option background
                 option_rect = pygame.Rect(
-                    SCREEN_WIDTH // 2 - SKILL_OPTION_WIDTH // 2,
-                    start_y + i * (SKILL_OPTION_HEIGHT + SKILL_OPTION_SPACING),
-                    SKILL_OPTION_WIDTH,
-                    SKILL_OPTION_HEIGHT
+                    panel_x + 10,
+                    start_y + i * (option_height + option_spacing),
+                    panel_width - 20,
+                    option_height
                 )
                 
-                # Highlight selected option
-                if i == self.selected_option:
-                    pygame.draw.rect(screen, YELLOW, option_rect, 3)
-                    pygame.draw.rect(screen, DARK_GRAY, option_rect)
-                else:
-                    pygame.draw.rect(screen, GRAY, option_rect)
-                    
+                # Option background color
+                pygame.draw.rect(screen, GRAY, option_rect)
                 pygame.draw.rect(screen, WHITE, option_rect, 2)
                 
+                # Key number indicator
+                key_text = f"{i + 1}"
+                key_surface = self.large_font.render(key_text, True, YELLOW)
+                key_rect = key_surface.get_rect(x=option_rect.x + 5, y=option_rect.y + 5)
+                screen.blit(key_surface, key_rect)
+                
                 # Skill name
-                name_surface = self.font.render(skill_data['name'], True, WHITE)
+                name_surface = self.small_font.render(get_skill_name(skill_name), True, WHITE)
                 name_rect = name_surface.get_rect(
-                    centerx=option_rect.centerx,
-                    y=option_rect.y + 10
+                    x=option_rect.x + 30,
+                    y=option_rect.y + 5
                 )
                 screen.blit(name_surface, name_rect)
                 
                 # Skill description
-                desc_surface = self.small_font.render(skill_data['description'], True, LIGHT_GRAY)
+                desc_surface = self.small_font.render(get_skill_description(skill_name), True, LIGHT_GRAY)
                 desc_rect = desc_surface.get_rect(
-                    centerx=option_rect.centerx,
-                    y=option_rect.y + 35
+                    x=option_rect.x + 5,
+                    y=option_rect.y + 25
                 )
                 screen.blit(desc_surface, desc_rect)
                 
                 # Current level if applicable
-                current_level = self.player.skills.get(skill_name, 0)
+                current_level = player.skills.get(skill_name, 0)
                 max_level = skill_data['max_level']
                 if current_level > 0:
-                    level_info = f"Level {current_level} → {current_level + 1} (Max: {max_level})"
+                    level_info = f"Lv{current_level}→{current_level + 1} (Max:{max_level})"
                 else:
-                    level_info = f"New skill (Max: {max_level})"
+                    level_info = f"New (Max:{max_level})"
                     
                 level_surface = self.small_font.render(level_info, True, YELLOW)
                 level_rect = level_surface.get_rect(
-                    centerx=option_rect.centerx,
-                    y=option_rect.y + 60
+                    x=option_rect.x + 5,
+                    y=option_rect.y + 50
                 )
                 screen.blit(level_surface, level_rect)
                 
-        # Instructions
-        instruction_text = "Use W/S or ↑/↓ to select, ENTER or SPACE to choose"
+        # Instructions at bottom
+        if side == 'left':
+            instruction_text = "Press 1, 2, or 3"
+        else:
+            instruction_text = "Press Numpad 1, 2, or 3"
+            
         instruction_surface = self.small_font.render(instruction_text, True, WHITE)
-        instruction_rect = instruction_surface.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT - 50))
+        instruction_rect = instruction_surface.get_rect(
+            centerx=panel_x + panel_width // 2,
+            y=panel_y + panel_height - 30
+        )
         screen.blit(instruction_surface, instruction_rect)
 
 
 class MainMenu:
     def __init__(self):
-        self.font = pygame.font.Font(None, UI_FONT_SIZE)
-        self.large_font = pygame.font.Font(None, UI_LARGE_FONT_SIZE)
-        self.title_font = pygame.font.Font(None, 72)
+        # Try to use a system font that supports Chinese characters
+        try:
+            self.font = pygame.font.SysFont('simsun,arial,helvetica', UI_FONT_SIZE)
+            self.large_font = pygame.font.SysFont('simsun,arial,helvetica', UI_LARGE_FONT_SIZE)
+            self.title_font = pygame.font.SysFont('simsun,arial,helvetica', 72)
+        except:
+            # Fallback to default font
+            self.font = pygame.font.Font(None, UI_FONT_SIZE)
+            self.large_font = pygame.font.Font(None, UI_LARGE_FONT_SIZE)
+            self.title_font = pygame.font.Font(None, 72)
         
     def draw(self, screen):
         """Draw main menu"""
@@ -305,20 +403,22 @@ class MainMenu:
         screen.blit(title_surface, title_rect)
         
         # Subtitle
-        subtitle_text = "Cooperative Survival Game"
+        subtitle_text = "Cooperative Survival Game"  # Keep English for game subtitle
         subtitle_surface = self.large_font.render(subtitle_text, True, WHITE)
         subtitle_rect = subtitle_surface.get_rect(center=(SCREEN_WIDTH // 2, 250))
         screen.blit(subtitle_surface, subtitle_rect)
         
         # Instructions
         instructions = [
-            "Player 1: WASD to move, Q to attack",
-            "Player 2: Arrow keys to move, K to attack",
+            "Player 1: WASD to move, Q to attack/shoot",  # Updated controls
+            "Player 2: Arrow keys to move, K to attack/shoot",
             "",
-            "Survive waves of enemies and level up!",
+            "Short press Q/K: Melee attack or quick shot",
+            "Long press Q/K: Special weapon (when unlocked)",
+            "Unlock 'Ranged Combat' skill to enable shooting!",
             "",
-            "Press SPACE to start",
-            "Press ESC to quit"
+            get_text('press_space'),
+            get_text('press_q')
         ]
         
         start_y = 350
