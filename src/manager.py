@@ -1,0 +1,336 @@
+import pygame
+import random
+import math
+from settings import *
+from src.enemy import Enemy, FastEnemy, TankEnemy, Boss, XPOrb
+
+class GameManager:
+    def __init__(self):
+        self.current_wave = 1
+        self.wave_active = False
+        self.wave_break_timer = 0
+        self.enemies = pygame.sprite.Group()
+        self.xp_orbs = pygame.sprite.Group()
+        
+        # Game state
+        self.game_state = GAME_STATE_MENU
+        self.skill_selection_player = None
+        
+        # Wave management
+        self.enemies_to_spawn = 0
+        self.spawn_timer = 0
+        self.spawn_interval = 1.0  # seconds between enemy spawns
+        
+        # Boss tracking
+        self.boss_spawned = False
+        
+    def start_new_game(self):
+        """Start a new game"""
+        self.current_wave = 1
+        self.wave_active = False
+        self.wave_break_timer = WAVE_BREAK_TIME
+        self.enemies.empty()
+        self.xp_orbs.empty()
+        self.game_state = GAME_STATE_PLAYING
+        self.skill_selection_player = None
+        self.boss_spawned = False
+        
+    def update(self, dt, players):
+        """Update game manager"""
+        if self.game_state != GAME_STATE_PLAYING:
+            return
+            
+        # Update enemies
+        self.enemies.update(dt, players)
+        
+        # Update XP orbs
+        self.xp_orbs.update(dt, players)
+        
+        # Handle XP orb pickup
+        self.handle_xp_pickup(players)
+        
+        # Handle enemy-player collisions
+        self.handle_enemy_collisions(players)
+        
+        # Handle player attacks
+        self.handle_player_attacks(players)
+        
+        # Check if all players are dead
+        if all(not player.is_alive for player in players):
+            self.game_state = GAME_STATE_GAME_OVER
+            return
+            
+        # Wave management
+        if not self.wave_active:
+            # Wave break period
+            self.wave_break_timer -= dt
+            if self.wave_break_timer <= 0:
+                self.start_wave()
+        else:
+            # Wave is active
+            self.update_wave_spawning(dt)
+            
+            # Check if wave is complete
+            if len(self.enemies) == 0 and self.enemies_to_spawn == 0:
+                self.complete_wave()
+                
+    def start_wave(self):
+        """Start a new wave"""
+        self.wave_active = True
+        self.boss_spawned = False
+        
+        # Calculate enemies to spawn
+        base_count = WAVE_BASE_ENEMY_COUNT
+        additional_count = (self.current_wave - 1) * WAVE_ENEMY_INCREASE
+        self.enemies_to_spawn = base_count + additional_count
+        
+        # Check if this is a boss wave
+        if self.current_wave % BOSS_WAVE_INTERVAL == 0:
+            self.enemies_to_spawn += 1  # Add one more for the boss
+            
+        self.spawn_timer = 0
+        
+    def update_wave_spawning(self, dt):
+        """Handle enemy spawning during wave"""
+        if self.enemies_to_spawn <= 0:
+            return
+            
+        self.spawn_timer += dt
+        
+        if self.spawn_timer >= self.spawn_interval:
+            self.spawn_enemy()
+            self.enemies_to_spawn -= 1
+            self.spawn_timer = 0
+            
+            # Adjust spawn interval for difficulty
+            self.spawn_interval = max(0.3, 1.0 - (self.current_wave * 0.05))
+            
+    def spawn_enemy(self):
+        """Spawn a single enemy"""
+        # Choose spawn position (from edges of screen)
+        edge = random.randint(0, 3)  # 0=top, 1=right, 2=bottom, 3=left
+        
+        if edge == 0:  # top
+            x = random.randint(0, SCREEN_WIDTH)
+            y = -ENEMY_SIZE
+        elif edge == 1:  # right
+            x = SCREEN_WIDTH + ENEMY_SIZE
+            y = random.randint(0, SCREEN_HEIGHT)
+        elif edge == 2:  # bottom
+            x = random.randint(0, SCREEN_WIDTH)
+            y = SCREEN_HEIGHT + ENEMY_SIZE
+        else:  # left
+            x = -ENEMY_SIZE
+            y = random.randint(0, SCREEN_HEIGHT)
+            
+        # Determine enemy type
+        if (self.current_wave % BOSS_WAVE_INTERVAL == 0 and 
+            self.enemies_to_spawn == 0 and not self.boss_spawned):
+            # Spawn boss
+            enemy = Boss(SCREEN_WIDTH // 2, -BOSS_SIZE, self.current_wave)
+            self.boss_spawned = True
+        else:
+            # Spawn regular enemy
+            enemy_type = random.choices(
+                [Enemy, FastEnemy, TankEnemy],
+                weights=[60, 25, 15],  # 60% normal, 25% fast, 15% tank
+                k=1
+            )[0]
+            
+            enemy = enemy_type(x, y, self.current_wave)
+            
+        self.enemies.add(enemy)
+        
+    def complete_wave(self):
+        """Complete the current wave"""
+        self.wave_active = False
+        self.current_wave += 1
+        self.wave_break_timer = WAVE_BREAK_TIME
+        
+    def handle_xp_pickup(self, players):
+        """Handle XP orb pickup by players"""
+        for orb in self.xp_orbs:
+            for player in players:
+                if player.is_alive and orb.rect.colliderect(player.rect):
+                    # Player picks up XP
+                    level_up = player.add_xp(orb.xp_value)
+                    orb.kill()
+                    
+                    # Handle level up
+                    if level_up:
+                        self.trigger_skill_selection(player)
+                    break
+                    
+        # Remove expired orbs
+        for orb in self.xp_orbs:
+            if orb.lifetime <= 0:
+                orb.kill()
+                
+    def handle_enemy_collisions(self, players):
+        """Handle collisions between enemies and players"""
+        for enemy in self.enemies:
+            for player in players:
+                if player.is_alive and enemy.collides_with_player(player):
+                    # Player takes damage
+                    if player.take_damage(enemy.damage):
+                        # Knockback effect (optional)
+                        pass
+                        
+    def handle_player_attacks(self, players):
+        """Handle player attacks against enemies"""
+        for player in players:
+            if not player.is_alive or not player.is_attacking or not player.hitbox:
+                continue
+                
+            stats = player.get_effective_stats()
+            
+            # Check collision with enemies
+            for enemy in self.enemies:
+                if player.hitbox.colliderect(enemy.rect):
+                    # Calculate damage
+                    damage = stats['damage']
+                    
+                    # Apply critical hit
+                    if random.random() < stats['crit_chance']:
+                        damage *= stats['crit_multiplier']
+                        
+                    # Apply execute skill
+                    if ('execute' in player.skills and 
+                        enemy.hp / enemy.max_hp <= 0.2):
+                        damage = enemy.hp  # Instant kill
+                        
+                    # Deal damage
+                    enemy_died = enemy.take_damage(damage, player)
+                    
+                    # Apply status effects
+                    if 'frost_touch' in player.skills:
+                        enemy.apply_slow(0.5, 2.0)
+                        
+                    if 'stun_strike' in player.skills:
+                        if random.random() < 0.2:
+                            enemy.apply_stun(1.5)
+                            
+                    # Life steal
+                    if stats['life_steal'] > 0:
+                        heal_amount = damage * stats['life_steal']
+                        player.heal(heal_amount)
+                        
+                    # Handle enemy death
+                    if enemy_died:
+                        self.handle_enemy_death(enemy, player)
+                        
+    def handle_enemy_death(self, enemy, killer_player):
+        """Handle enemy death and XP drop"""
+        # Create XP orb
+        xp_orb = XPOrb(enemy.rect.centerx, enemy.rect.centery, enemy.xp_reward)
+        self.xp_orbs.add(xp_orb)
+        
+        # Remove enemy
+        enemy.kill()
+        
+    def trigger_skill_selection(self, player):
+        """Trigger skill selection for a player"""
+        self.game_state = GAME_STATE_SKILL_SELECTION
+        self.skill_selection_player = player
+        
+    def complete_skill_selection(self, skill_name):
+        """Complete skill selection"""
+        if self.skill_selection_player and skill_name:
+            self.skill_selection_player.add_skill(skill_name)
+            
+        self.game_state = GAME_STATE_PLAYING
+        self.skill_selection_player = None
+        
+    def get_enemies_remaining(self):
+        """Get number of enemies remaining in current wave"""
+        return len(self.enemies) + self.enemies_to_spawn
+        
+    def is_wave_break(self):
+        """Check if currently in wave break"""
+        return not self.wave_active and self.game_state == GAME_STATE_PLAYING
+        
+    def get_wave_break_time_remaining(self):
+        """Get remaining time in wave break"""
+        return max(0, self.wave_break_timer)
+        
+    def draw_debug_info(self, screen, font):
+        """Draw debug information"""
+        debug_info = [
+            f"Wave: {self.current_wave}",
+            f"Enemies: {len(self.enemies)}",
+            f"To Spawn: {self.enemies_to_spawn}",
+            f"XP Orbs: {len(self.xp_orbs)}",
+            f"State: {self.game_state}"
+        ]
+        
+        y = SCREEN_HEIGHT - 150
+        for info in debug_info:
+            text_surface = font.render(info, True, WHITE)
+            screen.blit(text_surface, (10, y))
+            y += 20
+            
+    def reset_game(self):
+        """Reset game to initial state"""
+        self.__init__()
+        
+
+class ParticleSystem:
+    """Simple particle system for visual effects"""
+    def __init__(self):
+        self.particles = []
+        
+    def add_blood_particles(self, x, y):
+        """Add blood particles at position"""
+        for _ in range(BLOOD_PARTICLE_COUNT):
+            particle = {
+                'x': x,
+                'y': y,
+                'vx': random.uniform(-50, 50),
+                'vy': random.uniform(-50, 50),
+                'lifetime': PARTICLE_LIFETIME,
+                'color': RED,
+                'size': random.randint(2, 4)
+            }
+            self.particles.append(particle)
+            
+    def add_xp_particles(self, x, y):
+        """Add XP particles at position"""
+        for _ in range(3):
+            particle = {
+                'x': x,
+                'y': y,
+                'vx': random.uniform(-30, 30),
+                'vy': random.uniform(-30, 30),
+                'lifetime': PARTICLE_LIFETIME * 0.5,
+                'color': YELLOW,
+                'size': random.randint(1, 3)
+            }
+            self.particles.append(particle)
+            
+    def update(self, dt):
+        """Update all particles"""
+        for particle in self.particles[:]:
+            particle['x'] += particle['vx'] * dt
+            particle['y'] += particle['vy'] * dt
+            particle['lifetime'] -= dt
+            
+            # Apply gravity
+            particle['vy'] += 100 * dt
+            
+            if particle['lifetime'] <= 0:
+                self.particles.remove(particle)
+                
+    def draw(self, screen):
+        """Draw all particles"""
+        for particle in self.particles:
+            alpha = int(255 * (particle['lifetime'] / PARTICLE_LIFETIME))
+            color = (*particle['color'][:3], alpha)
+            
+            # Create surface with alpha
+            particle_surface = pygame.Surface((particle['size'] * 2, particle['size'] * 2))
+            particle_surface.set_alpha(alpha)
+            particle_surface.fill(particle['color'])
+            
+            screen.blit(particle_surface, 
+                       (int(particle['x'] - particle['size']), 
+                        int(particle['y'] - particle['size'])))
