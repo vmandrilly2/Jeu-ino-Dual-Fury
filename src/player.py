@@ -61,6 +61,8 @@ class Player(pygame.sprite.Sprite):
         # Player stats
         self.max_hp = PLAYER_STARTING_HP
         self.hp = self.max_hp
+        self.max_mana = 100  # Add mana system for item effects
+        self.mana = self.max_mana
         self.level = PLAYER_STARTING_LEVEL
         self.xp = PLAYER_STARTING_XP
         self.xp_to_next_level = self.calculate_xp_requirement()
@@ -99,6 +101,31 @@ class Player(pygame.sprite.Sprite):
         self.shock_wave_counter = 0
         self.dodge_dash_cooldown = 0
         
+        # New skill effects
+        self.burn_effects = {}  # enemy_id: (damage, duration)
+        self.poison_effects = {}  # enemy_id: (damage, duration, slow)
+        self.time_slow_cooldown = 0
+        self.blink_cooldown = 0
+        self.rewind_cooldown = 0
+        self.rewind_hp_history = []  # Store HP values for rewind
+        self.blood_frenzy_stacks = 0
+        self.blood_frenzy_timer = 0
+        self.last_stand_triggered = False
+        self.last_stand_timer = 0
+        self.arcane_missiles_timer = 0
+        self.spell_echo_last_attack = None
+        
+        # Item buff effects
+        self.damage_boost_timer = 0
+        self.damage_boost_multiplier = 1.0
+        self.speed_boost_timer = 0
+        self.speed_boost_multiplier = 1.0
+        self.crit_boost_timer = 0
+        self.crit_boost_amount = 0
+        self.invincible_timer = 0
+        self.explosive_attacks_remaining = 0
+        self.has_phoenix_feather = False
+        
         # Shooting system
         self.projectiles = pygame.sprite.Group()
         self.shoot_cooldown = 0
@@ -134,6 +161,12 @@ class Player(pygame.sprite.Sprite):
             'explosive_damage': 0
         }
         
+        # Apply berserker rage damage bonus
+        if 'berserker_rage' in self.skills:
+            hp_ratio = self.hp / self.max_hp
+            damage_bonus = (1 - hp_ratio) * SKILLS['berserker_rage']['effect']['max_damage_bonus']
+            stats['damage'] *= (1 + damage_bonus)
+        
         # Apply skill effects
         for skill_name, skill_level in self.skills.items():
             if skill_name in SKILLS:
@@ -168,6 +201,14 @@ class Player(pygame.sprite.Sprite):
                 stats['explosive_damage'] += 20 * skill_level
             elif skill_name == 'multi_shot':
                 stats['multi_shot'] += skill_level
+        
+        # Apply item buff effects
+        if self.damage_boost_timer > 0:
+            stats['damage'] *= self.damage_boost_multiplier
+        if self.speed_boost_timer > 0:
+            stats['speed'] *= self.speed_boost_multiplier
+        if self.crit_boost_timer > 0:
+            stats['crit_chance'] += self.crit_boost_amount
                     
         return stats
     
@@ -187,6 +228,56 @@ class Player(pygame.sprite.Sprite):
         self.shoot_cooldown = max(0, self.shoot_cooldown - dt)
         self.special_weapon_cooldown = max(0, self.special_weapon_cooldown - dt)
         self.regen_timer += dt
+        
+        # Update new skill timers
+        self.time_slow_cooldown = max(0, self.time_slow_cooldown - dt)
+        self.blink_cooldown = max(0, self.blink_cooldown - dt)
+        self.rewind_cooldown = max(0, self.rewind_cooldown - dt)
+        self.blood_frenzy_timer = max(0, self.blood_frenzy_timer - dt)
+        self.last_stand_timer = max(0, self.last_stand_timer - dt)
+        self.arcane_missiles_timer += dt
+        
+        # Update item buff timers
+        self.damage_boost_timer = max(0, self.damage_boost_timer - dt)
+        self.speed_boost_timer = max(0, self.speed_boost_timer - dt)
+        self.crit_boost_timer = max(0, self.crit_boost_timer - dt)
+        self.invincible_timer = max(0, self.invincible_timer - dt)
+        
+        # Reset multipliers when timers expire
+        if self.damage_boost_timer <= 0:
+            self.damage_boost_multiplier = 1.0
+        if self.speed_boost_timer <= 0:
+            self.speed_boost_multiplier = 1.0
+        if self.crit_boost_timer <= 0:
+            self.crit_boost_amount = 0
+        
+        # Update rewind HP history
+        if 'rewind' in self.skills:
+            self.rewind_hp_history.append((self.hp, dt))
+            # Keep only last 3 seconds of history
+            total_time = 0
+            for i in range(len(self.rewind_hp_history) - 1, -1, -1):
+                total_time += self.rewind_hp_history[i][1]
+                if total_time > 3.0:
+                    self.rewind_hp_history = self.rewind_hp_history[i:]
+                    break
+        
+        # Handle blood frenzy decay
+        if self.blood_frenzy_timer <= 0 and self.blood_frenzy_stacks > 0:
+            self.blood_frenzy_stacks = max(0, self.blood_frenzy_stacks - 1)
+            if self.blood_frenzy_stacks > 0:
+                self.blood_frenzy_timer = 10.0  # Reset timer for remaining stacks
+        
+        # Handle last stand
+        if 'last_stand' in self.skills and not self.last_stand_triggered:
+            if self.hp / self.max_hp <= SKILLS['last_stand']['effect']['trigger_threshold']:
+                self.last_stand_triggered = True
+                self.last_stand_timer = SKILLS['last_stand']['effect']['invincible_duration']
+                self.invincible_time = self.last_stand_timer
+        
+        # Reset last stand when HP is restored
+        if self.last_stand_triggered and self.hp / self.max_hp > 0.5:
+            self.last_stand_triggered = False
         
         # Update projectiles
         self.projectiles.update(dt)
@@ -505,16 +596,44 @@ class Player(pygame.sprite.Sprite):
         """Legacy method for compatibility - now redirects to shoot_forward"""
         self.shoot_forward(self.enemies if hasattr(self, 'enemies') else None)
                 
-    def take_damage(self, damage, other_player=None):
+    def take_damage(self, damage, attacker=None):
         """Take damage with invincibility frames"""
         if not self.is_alive or self.invincible_time > 0:
+            return False
+            
+        # Check for invincibility potion effect
+        if self.invincible_timer > 0:
             return False
             
         stats = self.get_effective_stats()
         actual_damage = damage * (1 - stats['damage_reduction'])
         
+        # Handle mana shield
+        if 'mana_shield' in self.skills and self.mana > 0:
+            mana_absorption = SKILLS['mana_shield']['effect']['mana_absorption']
+            mana_damage = actual_damage * mana_absorption
+            hp_damage = actual_damage * (1 - mana_absorption)
+            
+            mana_used = min(self.mana, mana_damage * 2)  # 2 mana per 1 damage absorbed
+            self.mana -= mana_used
+            absorbed_damage = mana_used / 2
+            
+            actual_damage = hp_damage + max(0, mana_damage - absorbed_damage)
+        
         self.hp -= actual_damage
         self.invincible_time = PLAYER_INVINCIBILITY_TIME
+        
+        # Check for death and phoenix feather
+        if self.hp <= 0 and self.has_phoenix_feather:
+            self.hp = self.max_hp  # Revive with full HP
+            self.has_phoenix_feather = False  # Consume the feather
+            self.invincible_time = 3.0  # 3 seconds of invincibility after revival
+            return False  # Didn't actually die
+        
+        # Handle ice armor effect
+        if 'ice_armor' in self.skills and attacker and hasattr(attacker, 'apply_slow'):
+            effect = SKILLS['ice_armor']['effect']
+            attacker.apply_slow(effect['armor_slow'], effect['armor_slow_duration'])
         
         if self.hp <= 0:
             self.hp = 0
@@ -601,6 +720,11 @@ class Player(pygame.sprite.Sprite):
             if current_level < skill_data['max_level']:
                 available.append(skill_name)
         return available
+        
+    def gain_xp(self, amount):
+        """Gain experience points"""
+        self.xp += amount
+        # Note: Level up logic would be handled elsewhere if needed
         
     def draw(self, screen):
         """Draw the player"""

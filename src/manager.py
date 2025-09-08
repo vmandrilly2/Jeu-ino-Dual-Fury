@@ -3,6 +3,7 @@ import random
 import math
 from settings import *
 from src.enemy import Enemy, FastEnemy, TankEnemy, Boss, MajorBoss, XPOrb, DamageNumber
+from src.item import ItemManager
 
 class GameManager:
     def __init__(self):
@@ -12,6 +13,7 @@ class GameManager:
         self.enemies = pygame.sprite.Group()
         self.xp_orbs = pygame.sprite.Group()
         self.damage_numbers = []  # List of floating damage numbers
+        self.item_manager = ItemManager()  # Item system
         
         # Screen shake effect
         self.screen_shake_timer = 0
@@ -56,6 +58,9 @@ class GameManager:
         # Update XP orbs
         self.xp_orbs.update(dt, players)
         
+        # Update items
+        self.item_manager.update(dt)
+        
         # Update damage numbers
         self.damage_numbers = [dn for dn in self.damage_numbers if not dn.update(dt)]
         
@@ -67,6 +72,9 @@ class GameManager:
         
         # Handle XP orb pickup
         self.handle_xp_pickup(players)
+        
+        # Handle item pickup
+        self.handle_item_pickup(players)
         
         # Handle enemy-player collisions
         self.handle_enemy_collisions(players)
@@ -215,6 +223,15 @@ class GameManager:
             if orb.lifetime <= 0:
                 orb.kill()
                 
+    def handle_item_pickup(self, players):
+        """Handle item pickup by players"""
+        for player in players:
+            if not player.is_alive:
+                continue
+                
+            picked_up_items = self.item_manager.check_player_pickup(player)
+            # Items are automatically applied by the ItemManager
+                
     def handle_enemy_collisions(self, players):
         """Handle collisions between enemies and players"""
         for enemy in self.enemies:
@@ -258,6 +275,25 @@ class GameManager:
                     if 'stun_strike' in player.skills:
                         if random.random() < 0.2:
                             enemy.apply_stun(1.5)
+                    
+                    # Apply elemental effects
+                    if 'flame_weapon' in player.skills:
+                        effect = SKILLS['flame_weapon']['effect']
+                        self.apply_burn_effect(enemy, effect['burn_damage'] * player.skills['flame_weapon'], effect['burn_duration'])
+                    
+                    if 'poison_blade' in player.skills:
+                        effect = SKILLS['poison_blade']['effect']
+                        self.apply_poison_effect(enemy, effect['poison_damage'] * player.skills['poison_blade'], 
+                                               effect['poison_duration'], effect['poison_slow'])
+                    
+                    if 'lightning_strike' in player.skills:
+                        effect = SKILLS['lightning_strike']['effect']
+                        self.apply_chain_lightning(enemy, damage, effect['chain_range'], effect['chain_count'])
+                    
+                    # Spell echo effect
+                    if 'spell_echo' in player.skills and random.random() < SKILLS['spell_echo']['effect']['echo_chance']:
+                        # Repeat the attack after a short delay
+                        player.spell_echo_last_attack = {'damage': damage, 'target': enemy, 'delay': 0.2}
                             
                     # Life steal
                     if stats['life_steal'] > 0:
@@ -267,6 +303,11 @@ class GameManager:
                     # Handle enemy death
                     if enemy_died:
                         self.handle_enemy_death(enemy, player)
+                        
+                        # Blood frenzy effect
+                        if 'blood_frenzy' in player.skills:
+                            player.blood_frenzy_stacks = min(5, player.blood_frenzy_stacks + 1)
+                            player.blood_frenzy_timer = 10.0
                         
             # Check projectile attacks
             self.handle_projectile_collisions(player)
@@ -355,6 +396,15 @@ class GameManager:
         xp_orb = XPOrb(enemy.rect.centerx, enemy.rect.centery, enemy.xp_reward)
         self.xp_orbs.add(xp_orb)
         
+        # Drop item based on enemy type
+        enemy_type = 'normal'
+        if isinstance(enemy, Boss) or isinstance(enemy, MajorBoss):
+            enemy_type = 'boss'
+        elif isinstance(enemy, TankEnemy):
+            enemy_type = 'tank'
+        
+        self.item_manager.drop_item_from_enemy(enemy.rect.centerx, enemy.rect.centery, enemy_type)
+        
         # Remove enemy
         enemy.kill()
         
@@ -426,6 +476,50 @@ class GameManager:
         """Reset game to initial state"""
         self.__init__()
         
+    def apply_burn_effect(self, enemy, damage, duration):
+        """Apply burn effect to enemy"""
+        if hasattr(enemy, 'burn_damage'):
+            enemy.burn_damage = damage
+            enemy.burn_duration = duration
+        
+    def apply_poison_effect(self, enemy, damage, duration, slow_factor):
+        """Apply poison effect to enemy"""
+        if hasattr(enemy, 'poison_damage'):
+            enemy.poison_damage = damage
+            enemy.poison_duration = duration
+            enemy.poison_slow = slow_factor
+            
+    def apply_chain_lightning(self, initial_enemy, damage, chain_range, chain_count):
+        """Apply chain lightning effect"""
+        current_enemy = initial_enemy
+        chained_enemies = {initial_enemy}
+        current_damage = damage
+        
+        for i in range(chain_count - 1):
+            nearest_enemy = None
+            nearest_distance = float('inf')
+            
+            for enemy in self.enemies:
+                if enemy in chained_enemies or not enemy.is_alive:
+                    continue
+                    
+                distance = math.sqrt(
+                    (enemy.rect.centerx - current_enemy.rect.centerx) ** 2 +
+                    (enemy.rect.centery - current_enemy.rect.centery) ** 2
+                )
+                
+                if distance <= chain_range and distance < nearest_distance:
+                    nearest_distance = distance
+                    nearest_enemy = enemy
+            
+            if nearest_enemy:
+                current_damage *= 0.8  # Reduce damage for each chain
+                nearest_enemy.take_damage(current_damage)
+                chained_enemies.add(nearest_enemy)
+                current_enemy = nearest_enemy
+            else:
+                break
+
 
 class ParticleSystem:
     """Simple particle system for visual effects"""

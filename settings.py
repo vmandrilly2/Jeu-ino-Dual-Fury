@@ -386,6 +386,160 @@ SKILLS = {
         'type': 'shooting',
         'max_level': 1,
         'effect': {'multi_shot': 3}
+    },
+    
+    # Elemental skills
+    'flame_weapon': {
+        'name': 'Flame Weapon',
+        'name_zh': '烈焰武器',
+        'description': 'Attacks burn enemies for 3 seconds',
+        'description_zh': '攻击使敌人燃烧3秒',
+        'type': 'elemental',
+        'max_level': 3,
+        'effect': {'burn_damage': 5, 'burn_duration': 3.0}
+    },
+    'lightning_strike': {
+        'name': 'Lightning Strike',
+        'name_zh': '雷电打击',
+        'description': 'Chain lightning to nearby enemies',
+        'description_zh': '闪电链击附近敌人',
+        'type': 'elemental',
+        'max_level': 1,
+        'effect': {'chain_lightning': True, 'chain_range': 80, 'chain_count': 3}
+    },
+    'poison_blade': {
+        'name': 'Poison Blade',
+        'name_zh': '毒刃',
+        'description': 'Attacks poison enemies, reducing their speed',
+        'description_zh': '攻击使敌人中毒，降低移动速度',
+        'type': 'elemental',
+        'max_level': 2,
+        'effect': {'poison_damage': 3, 'poison_duration': 5.0, 'poison_slow': 0.3}
+    },
+    'ice_armor': {
+        'name': 'Ice Armor',
+        'name_zh': '冰甲',
+        'description': 'Attackers are slowed for 2 seconds',
+        'description_zh': '攻击者被减速2秒',
+        'type': 'elemental',
+        'max_level': 1,
+        'effect': {'ice_armor': True, 'armor_slow': 0.4, 'armor_slow_duration': 2.0}
+    },
+    
+    # Summoning skills
+    'spirit_wolf': {
+        'name': 'Spirit Wolf',
+        'name_zh': '灵魂之狼',
+        'description': 'Summon a wolf companion',
+        'description_zh': '召唤狼灵伙伴',
+        'type': 'summoning',
+        'max_level': 1,
+        'effect': {'summon_wolf': True, 'wolf_damage': 15, 'wolf_speed': 80}
+    },
+    'healing_orb': {
+        'name': 'Healing Orb',
+        'name_zh': '治疗法球',
+        'description': 'Summon orb that heals nearby players',
+        'description_zh': '召唤治疗附近玩家的法球',
+        'type': 'summoning',
+        'max_level': 2,
+        'effect': {'healing_orb': True, 'orb_heal': 2, 'orb_range': 60}
+    },
+    'shadow_clone': {
+        'name': 'Shadow Clone',
+        'name_zh': '影分身',
+        'description': 'Create a clone that mimics your attacks',
+        'description_zh': '创造模仿你攻击的影分身',
+        'type': 'summoning',
+        'max_level': 1,
+        'effect': {'shadow_clone': True, 'clone_damage': 0.5}
+    },
+    
+    # Time skills
+    'time_slow': {
+        'name': 'Time Slow',
+        'name_zh': '时间减缓',
+        'description': 'Slow all enemies for 5 seconds (cooldown: 30s)',
+        'description_zh': '减缓所有敌人5秒（冷却：30秒）',
+        'type': 'time',
+        'max_level': 1,
+        'effect': {'time_slow': True, 'slow_factor': 0.3, 'slow_duration': 5.0, 'cooldown': 30.0}
+    },
+    'blink': {
+        'name': 'Blink',
+        'name_zh': '闪现',
+        'description': 'Teleport short distance (cooldown: 8s)',
+        'description_zh': '短距离传送（冷却：8秒）',
+        'type': 'time',
+        'max_level': 2,
+        'effect': {'blink': True, 'blink_distance': 100, 'cooldown': 8.0}
+    },
+    'rewind': {
+        'name': 'Rewind',
+        'name_zh': '时光倒流',
+        'description': 'Restore HP to 3 seconds ago (cooldown: 45s)',
+        'description_zh': '恢复到3秒前的生命值（冷却：45秒）',
+        'type': 'time',
+        'max_level': 1,
+        'effect': {'rewind': True, 'rewind_time': 3.0, 'cooldown': 45.0}
+    },
+    
+    # Berserker skills
+    'berserker_rage': {
+        'name': 'Berserker Rage',
+        'name_zh': '狂战士之怒',
+        'description': 'Lower HP = Higher damage (max +50%)',
+        'description_zh': '生命值越低伤害越高（最高+50%）',
+        'type': 'berserker',
+        'max_level': 1,
+        'effect': {'berserker_rage': True, 'max_damage_bonus': 0.5}
+    },
+    'blood_frenzy': {
+        'name': 'Blood Frenzy',
+        'name_zh': '嗜血狂热',
+        'description': 'Each kill increases attack speed for 10s',
+        'description_zh': '每次击杀增加攻击速度10秒',
+        'type': 'berserker',
+        'max_level': 3,
+        'effect': {'blood_frenzy': True, 'frenzy_bonus': 0.15, 'frenzy_duration': 10.0}
+    },
+    'last_stand': {
+        'name': 'Last Stand',
+        'name_zh': '背水一战',
+        'description': 'Become invincible for 3s when HP drops below 20%',
+        'description_zh': '生命值低于20%时无敌3秒',
+        'type': 'berserker',
+        'max_level': 1,
+        'effect': {'last_stand': True, 'trigger_threshold': 0.2, 'invincible_duration': 3.0}
+    },
+    
+    # Mystic skills
+    'mana_shield': {
+        'name': 'Mana Shield',
+        'name_zh': '魔法护盾',
+        'description': 'Absorb damage with mana instead of HP',
+        'description_zh': '用魔法值而非生命值承受伤害',
+        'type': 'mystic',
+        'max_level': 1,
+        'effect': {'mana_shield': True, 'mana_absorption': 0.5}
+    },
+    'arcane_missiles': {
+        'name': 'Arcane Missiles',
+        'name_zh': '奥术飞弹',
+        'description': 'Auto-cast homing missiles every 3 seconds',
+        'description_zh': '每3秒自动发射追踪飞弹',
+        'type': 'mystic',
+        'max_level': 2,
+        'effect': {'arcane_missiles': True, 'missile_damage': 20, 'missile_interval': 3.0}
+    },
+    'spell_echo': {
+        'name': 'Spell Echo',
+        'name_zh': '法术回响',
+        'description': '25% chance to repeat last attack',
+        'description_zh': '25%几率重复上次攻击',
+        'type': 'mystic',
+        'max_level': 1,
+        'effect': {'spell_echo': True, 'echo_chance': 0.25}
     }
 }
 
@@ -437,5 +591,175 @@ TRANSLATIONS = {
         'boss': '首领',
         'wave_complete': '波次完成！',
         'next_wave_in': '下一波倒计时：'
+    }
+}
+
+# Item system
+ITEM_PICKUP_RANGE = 30
+ITEM_LIFETIME = 30.0  # Items disappear after 30 seconds
+ITEM_BOUNCE_HEIGHT = 10
+ITEM_BOUNCE_SPEED = 2.0
+
+# Item drop rates (probability)
+ITEM_DROP_RATES = {
+    'common': 0.3,    # 30% chance
+    'uncommon': 0.15, # 15% chance
+    'rare': 0.05,     # 5% chance
+    'epic': 0.02,     # 2% chance
+    'legendary': 0.005 # 0.5% chance
+}
+
+# Item definitions
+ITEMS = {
+    # Healing items
+    'health_potion': {
+        'name': 'Health Potion',
+        'name_zh': '生命药水',
+        'description': 'Restores 50 HP',
+        'description_zh': '恢复50点生命值',
+        'type': 'consumable',
+        'rarity': 'common',
+        'color': (255, 100, 100),  # Red
+        'effect': {'heal': 50}
+    },
+    'mega_health_potion': {
+        'name': 'Mega Health Potion',
+        'name_zh': '超级生命药水',
+        'description': 'Restores 150 HP',
+        'description_zh': '恢复150点生命值',
+        'type': 'consumable',
+        'rarity': 'rare',
+        'color': (255, 50, 50),  # Dark Red
+        'effect': {'heal': 150}
+    },
+    
+    # Mana items
+    'mana_potion': {
+        'name': 'Mana Potion',
+        'name_zh': '魔法药水',
+        'description': 'Restores 50 Mana',
+        'description_zh': '恢复50点魔法值',
+        'type': 'consumable',
+        'rarity': 'common',
+        'color': (100, 100, 255),  # Blue
+        'effect': {'mana': 50}
+    },
+    
+    # Temporary buff items
+    'strength_elixir': {
+        'name': 'Strength Elixir',
+        'name_zh': '力量药剂',
+        'description': '+50% damage for 30 seconds',
+        'description_zh': '30秒内伤害+50%',
+        'type': 'buff',
+        'rarity': 'uncommon',
+        'color': (255, 165, 0),  # Orange
+        'effect': {'damage_boost': 0.5, 'duration': 30.0}
+    },
+    'speed_elixir': {
+        'name': 'Speed Elixir',
+        'name_zh': '速度药剂',
+        'description': '+30% speed for 45 seconds',
+        'description_zh': '45秒内速度+30%',
+        'type': 'buff',
+        'rarity': 'uncommon',
+        'color': (0, 255, 255),  # Cyan
+        'effect': {'speed_boost': 0.3, 'duration': 45.0}
+    },
+    'invincibility_potion': {
+        'name': 'Invincibility Potion',
+        'name_zh': '无敌药水',
+        'description': 'Invincible for 5 seconds',
+        'description_zh': '无敌5秒',
+        'type': 'buff',
+        'rarity': 'epic',
+        'color': (255, 215, 0),  # Gold
+        'effect': {'invincible': True, 'duration': 5.0}
+    },
+    
+    # Permanent upgrade items
+    'heart_crystal': {
+        'name': 'Heart Crystal',
+        'name_zh': '心之水晶',
+        'description': 'Permanently increases max HP by 25',
+        'description_zh': '永久增加25点最大生命值',
+        'type': 'permanent',
+        'rarity': 'rare',
+        'color': (255, 20, 147),  # Deep Pink
+        'effect': {'max_hp_increase': 25}
+    },
+    'power_crystal': {
+        'name': 'Power Crystal',
+        'name_zh': '力量水晶',
+        'description': 'Permanently increases damage by 10%',
+        'description_zh': '永久增加10%伤害',
+        'type': 'permanent',
+        'rarity': 'rare',
+        'color': (255, 69, 0),  # Red Orange
+        'effect': {'damage_increase': 0.1}
+    },
+    'agility_crystal': {
+        'name': 'Agility Crystal',
+        'name_zh': '敏捷水晶',
+        'description': 'Permanently increases speed by 10%',
+        'description_zh': '永久增加10%速度',
+        'type': 'permanent',
+        'rarity': 'rare',
+        'color': (50, 205, 50),  # Lime Green
+        'effect': {'speed_increase': 0.1}
+    },
+    
+    # Special items
+    'xp_orb': {
+        'name': 'XP Orb',
+        'name_zh': '经验法球',
+        'description': 'Grants 100 XP',
+        'description_zh': '获得100点经验值',
+        'type': 'special',
+        'rarity': 'uncommon',
+        'color': (255, 255, 0),  # Yellow
+        'effect': {'xp': 100}
+    },
+    'skill_scroll': {
+        'name': 'Skill Scroll',
+        'name_zh': '技能卷轴',
+        'description': 'Instantly gain a random skill',
+        'description_zh': '立即获得随机技能',
+        'type': 'special',
+        'rarity': 'epic',
+        'color': (138, 43, 226),  # Blue Violet
+        'effect': {'random_skill': True}
+    },
+    'phoenix_feather': {
+        'name': 'Phoenix Feather',
+        'name_zh': '凤凰羽毛',
+        'description': 'Revive with full HP when killed',
+        'description_zh': '死亡时满血复活',
+        'type': 'special',
+        'rarity': 'legendary',
+        'color': (255, 140, 0),  # Dark Orange
+        'effect': {'revive': True}
+    },
+    
+    # Weapon enhancement items
+    'sharpening_stone': {
+        'name': 'Sharpening Stone',
+        'name_zh': '磨刀石',
+        'description': '+15% crit chance for 60 seconds',
+        'description_zh': '60秒内暴击率+15%',
+        'type': 'buff',
+        'rarity': 'uncommon',
+        'color': (169, 169, 169),  # Dark Gray
+        'effect': {'crit_boost': 0.15, 'duration': 60.0}
+    },
+    'explosive_powder': {
+        'name': 'Explosive Powder',
+        'name_zh': '爆炸粉末',
+        'description': 'Next 10 attacks explode',
+        'description_zh': '接下来10次攻击带有爆炸效果',
+        'type': 'buff',
+        'rarity': 'rare',
+        'color': (255, 99, 71),  # Tomato
+        'effect': {'explosive_attacks': 10}
     }
 }

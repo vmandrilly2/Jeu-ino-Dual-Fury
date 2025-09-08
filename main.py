@@ -161,6 +161,9 @@ class Game:
         for orb in self.game_manager.xp_orbs:
             orb.draw(surface)
             
+        # Draw items
+        self.game_manager.item_manager.draw(surface, 0, 0)  # No camera offset for now
+            
         # Draw enemies
         for enemy in self.game_manager.enemies:
             enemy.draw(surface)
