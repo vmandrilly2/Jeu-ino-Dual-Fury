@@ -2,7 +2,8 @@ import pygame
 import random
 import math
 from settings import *
-from src.enemy import Enemy, FastEnemy, TankEnemy, Boss, MajorBoss, XPOrb, DamageNumber
+from src.enemy import (Enemy, FastEnemy, TankEnemy, Boss, MajorBoss, XPOrb, DamageNumber,
+                      SniperEnemy, ExplodingEnemy, ShieldEnemy, SummonerEnemy, MinionEnemy)
 from src.item import ItemManager
 
 class GameManager:
@@ -53,7 +54,22 @@ class GameManager:
         self._players = players
             
         # Update enemies
-        self.enemies.update(dt, players)
+        for enemy in self.enemies:
+            enemy.update(dt, players)
+            
+            # Remove enemies that are too far off screen (with special handling for snipers)
+            max_distance = 300 if isinstance(enemy, SniperEnemy) else 200
+            if (enemy.rect.x < -max_distance or enemy.rect.x > SCREEN_WIDTH + max_distance or
+                enemy.rect.y < -max_distance or enemy.rect.y > SCREEN_HEIGHT + max_distance):
+                # For snipers, check if they've been off-screen for too long
+                if isinstance(enemy, SniperEnemy):
+                    if not hasattr(enemy, 'off_screen_timer'):
+                        enemy.off_screen_timer = 0
+                    enemy.off_screen_timer += dt
+                    if enemy.off_screen_timer > 5.0:  # 5 seconds off-screen limit
+                        enemy.kill()
+                else:
+                    enemy.kill()
         
         # Update XP orbs
         self.xp_orbs.update(dt, players)
@@ -145,18 +161,21 @@ class GameManager:
         # Choose spawn position (from edges of screen)
         edge = random.randint(0, 3)  # 0=top, 1=right, 2=bottom, 3=left
         
+        # Ensure spawn positions are closer to screen for better gameplay
+        margin = ENEMY_SIZE // 2
+        
         if edge == 0:  # top
-            x = random.randint(0, SCREEN_WIDTH)
-            y = -ENEMY_SIZE
+            x = random.randint(margin, SCREEN_WIDTH - margin)
+            y = -margin
         elif edge == 1:  # right
-            x = SCREEN_WIDTH + ENEMY_SIZE
-            y = random.randint(0, SCREEN_HEIGHT)
+            x = SCREEN_WIDTH + margin
+            y = random.randint(margin, SCREEN_HEIGHT - margin)
         elif edge == 2:  # bottom
-            x = random.randint(0, SCREEN_WIDTH)
-            y = SCREEN_HEIGHT + ENEMY_SIZE
+            x = random.randint(margin, SCREEN_WIDTH - margin)
+            y = SCREEN_HEIGHT + margin
         else:  # left
-            x = -ENEMY_SIZE
-            y = random.randint(0, SCREEN_HEIGHT)
+            x = -margin
+            y = random.randint(margin, SCREEN_HEIGHT - margin)
             
         # Determine enemy type
         if (self.current_wave % BOSS_WAVE_INTERVAL == 0 and 
@@ -169,20 +188,45 @@ class GameManager:
             enemy = MajorBoss(SCREEN_WIDTH // 2, -BOSS_SIZE - 20, self.current_wave)
             self.major_boss_spawned = True
         else:
-            # Spawn regular enemy with increased chance of TankEnemy towards end of wave
+            # Spawn regular enemy with varied types based on wave progression
             remaining_ratio = self.enemies_to_spawn / max(1, self.enemies_per_wave)
-            if remaining_ratio < 0.3:  # Last 30% of wave - more tank enemies
+            
+            # Different enemy compositions based on wave number and position in wave
+            if self.current_wave <= 3:
+                # Early waves - simpler enemies
                 enemy_type = random.choices(
                     [Enemy, FastEnemy, TankEnemy],
-                    weights=[40, 20, 40],  # 40% normal, 20% fast, 40% tank
+                    weights=[60, 25, 15],
                     k=1
                 )[0]
+            elif self.current_wave <= 6:
+                # Mid waves - introduce special enemies
+                if remaining_ratio < 0.3:  # Last 30% of wave
+                    enemy_type = random.choices(
+                        [Enemy, FastEnemy, TankEnemy, SniperEnemy, ExplodingEnemy],
+                        weights=[30, 20, 25, 15, 10],
+                        k=1
+                    )[0]
+                else:
+                    enemy_type = random.choices(
+                        [Enemy, FastEnemy, TankEnemy, SniperEnemy],
+                        weights=[50, 25, 15, 10],
+                        k=1
+                    )[0]
             else:
-                enemy_type = random.choices(
-                    [Enemy, FastEnemy, TankEnemy],
-                    weights=[60, 25, 15],  # 60% normal, 25% fast, 15% tank
-                    k=1
-                )[0]
+                # Late waves - all enemy types with more dangerous ones
+                if remaining_ratio < 0.3:  # Last 30% of wave
+                    enemy_type = random.choices(
+                        [Enemy, FastEnemy, TankEnemy, SniperEnemy, ExplodingEnemy, ShieldEnemy, SummonerEnemy],
+                        weights=[20, 15, 20, 15, 12, 10, 8],
+                        k=1
+                    )[0]
+                else:
+                    enemy_type = random.choices(
+                        [Enemy, FastEnemy, TankEnemy, SniperEnemy, ExplodingEnemy, ShieldEnemy],
+                        weights=[35, 20, 15, 12, 10, 8],
+                        k=1
+                    )[0]
             
             enemy = enemy_type(x, y, self.current_wave)
             
@@ -268,6 +312,14 @@ class GameManager:
                     # Deal damage
                     enemy_died = enemy.take_damage(damage, player)
                     
+                    # Handle special enemy death effects
+                    if enemy_died == 'explode' and isinstance(enemy, ExplodingEnemy):
+                        # Handle exploding enemy death
+                        damaged_players = enemy.explode(self._players)
+                        for damaged_player, explosion_damage in damaged_players:
+                            damaged_player.take_damage(explosion_damage)
+                        enemy_died = True  # Convert to boolean for normal death handling
+                    
                     # Apply status effects
                     if 'frost_touch' in player.skills:
                         enemy.apply_slow(0.5, 2.0)
@@ -347,6 +399,14 @@ class GameManager:
                     # Deal damage
                     enemy_died = enemy.take_damage(damage, player)
                     
+                    # Handle special enemy death effects
+                    if enemy_died == 'explode' and isinstance(enemy, ExplodingEnemy):
+                        # Handle exploding enemy death
+                        damaged_players = enemy.explode(self._players)
+                        for damaged_player, explosion_damage in damaged_players:
+                            damaged_player.take_damage(explosion_damage)
+                        enemy_died = True  # Convert to boolean for normal death handling
+                    
                     # Create floating damage number
                     damage_color = YELLOW if is_crit else WHITE
                     damage_number = DamageNumber(enemy.rect.centerx, enemy.rect.top - 10, damage, damage_color)
@@ -392,6 +452,13 @@ class GameManager:
                         
     def handle_enemy_death(self, enemy, killer_player):
         """Handle enemy death and XP drop"""
+        # Handle summoner minions
+        if isinstance(enemy, SummonerEnemy):
+            # Kill all minions when summoner dies
+            for minion in enemy.minions:
+                minion.hp = 0
+                minion.kill()
+        
         # Create XP orb
         xp_orb = XPOrb(enemy.rect.centerx, enemy.rect.centery, enemy.xp_reward)
         self.xp_orbs.add(xp_orb)
@@ -402,6 +469,14 @@ class GameManager:
             enemy_type = 'boss'
         elif isinstance(enemy, TankEnemy):
             enemy_type = 'tank'
+        elif isinstance(enemy, SniperEnemy):
+            enemy_type = 'sniper'
+        elif isinstance(enemy, ExplodingEnemy):
+            enemy_type = 'exploding'
+        elif isinstance(enemy, ShieldEnemy):
+            enemy_type = 'shield'
+        elif isinstance(enemy, SummonerEnemy):
+            enemy_type = 'summoner'
         
         self.item_manager.drop_item_from_enemy(enemy.rect.centerx, enemy.rect.centery, enemy_type)
         

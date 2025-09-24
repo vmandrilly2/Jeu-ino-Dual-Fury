@@ -244,7 +244,10 @@ def main():
         game = Game()
         game.run()
     except Exception as e:
+        import traceback
         print(f"An error occurred: {e}")
+        print("Full traceback:")
+        traceback.print_exc()
         pygame.quit()
         sys.exit(1)
 

@@ -131,6 +131,9 @@ class Enemy(pygame.sprite.Sprite):
         self.flash_timer = 0
         self.flash_duration = 0
         
+        # Life status
+        self.is_alive = True
+        
     def update(self, dt, players):
         """Update enemy state"""
         # Update status effects
@@ -219,6 +222,7 @@ class Enemy(pygame.sprite.Sprite):
         self.flash_duration = 0.1
         
         if self.hp <= 0:
+            self.is_alive = False
             return True  # Enemy is dead
             
         return False
@@ -691,6 +695,479 @@ class MajorBoss(Enemy):
         text = font.render("MAJOR BOSS", True, WHITE)
         text_rect = text.get_rect(center=(self.rect.centerx, self.rect.y - 35))
         screen.blit(text, text_rect)
+
+
+class SniperEnemy(Enemy):
+    """Long-range enemy that shoots precise, high-damage projectiles"""
+    def __init__(self, x, y, wave_number=1):
+        super().__init__(x, y, wave_number)
+        
+        # Sniper stats - slow but deadly
+        self.speed = self.base_speed * 0.4  # Very slow
+        self.max_hp = int(self.base_hp * 0.6) + (wave_number - 1) * ENEMY_HP_SCALING
+        self.hp = self.max_hp
+        self.damage = int((self.base_damage + (wave_number - 1) * ENEMY_DAMAGE_SCALING) * 2.0)  # High damage
+        
+        # Sniper shooting mechanics
+        self.can_shoot = True
+        self.shoot_cooldown = ENEMY_SHOOT_COOLDOWN * 2.5  # Slow but powerful shots
+        self.aim_timer = 0
+        self.aim_duration = 1.0  # Aim for 1 second before shooting
+        self.is_aiming = False
+        self.aim_target = None
+        
+        # Different color - dark green
+        self.image.fill((0, 100, 0))
+        
+    def update(self, dt, players):
+        """Update sniper with aiming mechanics"""
+        # Update status effects
+        self.slow_timer = max(0, self.slow_timer - dt)
+        if self.slow_timer <= 0:
+            self.slow_factor = 1.0
+            
+        self.stun_timer = max(0, self.stun_timer - dt)
+        if self.stun_timer <= 0:
+            self.is_stunned = False
+            
+        self.flash_timer = max(0, self.flash_timer - dt)
+        
+        # Update projectiles
+        self.projectiles = [p for p in self.projectiles if not p.update(dt)]
+        
+        # Don't move if stunned
+        if self.is_stunned:
+            return
+            
+        # Find closest living player
+        self.target_player = self.find_closest_player(players)
+        
+        if self.target_player:
+            # Snipers don't move much, they prefer to stay at distance
+            distance = self.distance_to_player(self.target_player)\n            if distance < 150:  # Too close, back away\n                self.move_away_from_target(dt)\n            elif distance > 300:  # Too far, slowly approach\n                effective_speed = self.speed * 0.5 * self.slow_factor\n                dx = self.target_player.rect.centerx - self.rect.centerx\n                dy = self.target_player.rect.centery - self.rect.centery\n                dist = math.sqrt(dx * dx + dy * dy)\n                if dist > 0:\n                    dx /= dist\n                    dy /= dist\n                    self.velocity.x = dx * effective_speed\n                    self.velocity.y = dy * effective_speed\n                    self.rect.x += self.velocity.x * dt\n                    self.rect.y += self.velocity.y * dt
+            
+            # Handle aiming and shooting
+            self.shoot_timer += dt
+            if self.shoot_timer >= self.shoot_cooldown and not self.is_aiming:
+                self.start_aiming()
+                
+            if self.is_aiming:
+                if self.target_player:
+                    self.aim_target = self.target_player.rect.center
+                self.aim_timer += dt
+                if self.aim_timer >= self.aim_duration:
+                    self.shoot_precise_shot()
+                    self.finish_aiming()
+    
+    def move_away_from_target(self, dt):
+        """Move away from target to maintain distance"""
+        if not self.target_player:
+            return
+            
+        # Calculate direction away from target
+        dx = self.rect.centerx - self.target_player.rect.centerx
+        dy = self.rect.centery - self.target_player.rect.centery
+        distance = math.sqrt(dx * dx + dy * dy)
+        
+        if distance > 0:
+            # Normalize direction
+            dx /= distance
+            dy /= distance
+            
+            # Apply speed and slow factor
+            effective_speed = self.speed * self.slow_factor
+            
+            # Update velocity
+            self.velocity.x = dx * effective_speed
+            self.velocity.y = dy * effective_speed
+            
+            # Update position
+            self.rect.x += self.velocity.x * dt
+            self.rect.y += self.velocity.y * dt
+    
+    def start_aiming(self):
+        """Start aiming at target"""
+        self.is_aiming = True
+        self.aim_timer = 0
+        self.aim_target = self.target_player.rect.center if self.target_player else None
+        
+    def finish_aiming(self):
+        """Finish aiming and reset timers"""
+        self.is_aiming = False
+        self.aim_timer = 0
+        self.shoot_timer = 0
+        
+    def shoot_precise_shot(self):
+        """Shoot a high-damage, fast projectile"""
+        if self.aim_target:
+            projectile = Projectile(
+                self.rect.centerx, self.rect.centery,
+                self.aim_target[0], self.aim_target[1],
+                speed=PROJECTILE_SPEED * 2.0,  # Very fast
+                damage=self.damage,  # Full damage
+                color=(255, 255, 0)  # Yellow projectiles
+            )
+            self.projectiles.append(projectile)
+    
+    def draw(self, screen):
+        """Draw sniper with aiming indicator"""
+        # Draw aiming line when aiming
+        if self.is_aiming and self.aim_target:
+            pygame.draw.line(screen, (255, 255, 0), 
+                           self.rect.center, self.aim_target, 2)
+            
+        # Flash white when taking damage
+        if self.flash_timer > 0:
+            flash_surface = pygame.Surface((ENEMY_SIZE, ENEMY_SIZE))
+            flash_surface.fill(WHITE)
+            screen.blit(flash_surface, self.rect)
+        else:
+            screen.blit(self.image, self.rect)
+            
+        # Draw projectiles
+        for projectile in self.projectiles:
+            projectile.draw(screen)
+            
+        # Draw health bar
+        if self.hp < self.max_hp:
+            bar_width = ENEMY_SIZE
+            bar_height = 4
+            bar_x = self.rect.x
+            bar_y = self.rect.y - 8
+            
+            # Background
+            pygame.draw.rect(screen, RED, (bar_x, bar_y, bar_width, bar_height))
+            
+            # Health
+            health_width = int((self.hp / self.max_hp) * bar_width)
+            pygame.draw.rect(screen, GREEN, (bar_x, bar_y, health_width, bar_height))
+
+
+class ExplodingEnemy(Enemy):
+    """Enemy that explodes when it gets close to players or dies"""
+    def __init__(self, x, y, wave_number=1):
+        super().__init__(x, y, wave_number)
+        
+        # Exploding enemy stats
+        self.speed = self.base_speed * 1.3  # Fast to get close
+        self.max_hp = int(self.base_hp * 0.8) + (wave_number - 1) * ENEMY_HP_SCALING
+        self.hp = self.max_hp
+        self.damage = int((self.base_damage + (wave_number - 1) * ENEMY_DAMAGE_SCALING) * 1.2)
+        
+        # Explosion mechanics
+        self.explosion_range = 80
+        self.explosion_damage = self.damage * 2
+        self.exploded = False
+        self.explosion_timer = 0
+        self.explosion_warning_distance = 60
+        self.is_warning = False
+        
+        # Different color - bright red
+        self.image.fill((255, 50, 50))
+        
+    def update(self, dt, players):
+        """Update exploding enemy with explosion logic"""
+        if self.exploded:
+            return
+            
+        super().update(dt, players)
+        
+        # Check if close enough to any player to explode
+        if self.target_player:
+            distance = self.distance_to_player(self.target_player)
+            
+            # Warning state when getting close
+            if distance <= self.explosion_warning_distance:
+                self.is_warning = True
+                
+            # Explode when very close
+            if distance <= 40:  # Close explosion range
+                self.explode(players)
+                
+    def take_damage(self, damage, player=None):
+        """Take damage and explode if killed"""
+        self.hp -= damage
+        
+        # Visual feedback
+        self.flash_timer = 0.1
+        self.flash_duration = 0.1
+        
+        if self.hp <= 0:
+            # Explode when killed
+            return 'explode'  # Special return value
+            
+        return False
+        
+    def explode(self, players):
+        """Explode and damage nearby players"""
+        if self.exploded:
+            return []
+            
+        self.exploded = True
+        damaged_players = []
+        
+        # Check damage to all players in range
+        for player in players:
+            if player.is_alive:
+                distance = self.distance_to_player(player)
+                if distance <= self.explosion_range:
+                    damaged_players.append((player, self.explosion_damage))
+                    
+        return damaged_players
+        
+    def draw(self, screen):
+        """Draw exploding enemy with warning effects"""
+        if self.exploded:
+            # Draw explosion effect
+            explosion_surface = pygame.Surface((self.explosion_range * 2, self.explosion_range * 2))
+            explosion_surface.fill((255, 200, 0))
+            explosion_surface.set_alpha(100)
+            explosion_rect = explosion_surface.get_rect(center=self.rect.center)
+            screen.blit(explosion_surface, explosion_rect)
+            return
+            
+        # Warning flash when close to players
+        if self.is_warning:
+            if int(pygame.time.get_ticks() / 100) % 2:  # Flash every 100ms
+                warning_surface = pygame.Surface((ENEMY_SIZE + 10, ENEMY_SIZE + 10))
+                warning_surface.fill((255, 255, 0))
+                warning_rect = warning_surface.get_rect(center=self.rect.center)
+                screen.blit(warning_surface, warning_rect)
+        
+        # Flash white when taking damage
+        if self.flash_timer > 0:
+            flash_surface = pygame.Surface((ENEMY_SIZE, ENEMY_SIZE))
+            flash_surface.fill(WHITE)
+            screen.blit(flash_surface, self.rect)
+        else:
+            screen.blit(self.image, self.rect)
+            
+        # Draw health bar
+        if self.hp < self.max_hp:
+            bar_width = ENEMY_SIZE
+            bar_height = 4
+            bar_x = self.rect.x
+            bar_y = self.rect.y - 8
+            
+            # Background
+            pygame.draw.rect(screen, RED, (bar_x, bar_y, bar_width, bar_height))
+            
+            # Health
+            health_width = int((self.hp / self.max_hp) * bar_width)
+            pygame.draw.rect(screen, GREEN, (bar_x, bar_y, health_width, bar_height))
+
+
+class ShieldEnemy(Enemy):
+    """Enemy with a rotating shield that blocks projectiles from certain directions"""
+    def __init__(self, x, y, wave_number=1):
+        super().__init__(x, y, wave_number)
+        
+        # Shield enemy stats
+        self.speed = self.base_speed * 0.8
+        self.max_hp = int(self.base_hp * 1.2) + (wave_number - 1) * ENEMY_HP_SCALING
+        self.hp = self.max_hp
+        self.damage = int((self.base_damage + (wave_number - 1) * ENEMY_DAMAGE_SCALING) * 0.9)
+        
+        # Shield mechanics
+        self.shield_angle = 0
+        self.shield_rotation_speed = 90  # degrees per second
+        self.shield_arc = 120  # degrees of protection
+        self.shield_active = True
+        
+        # Different color - blue
+        self.image.fill((0, 100, 255))
+        
+    def update(self, dt, players):
+        """Update shield enemy with rotating shield"""
+        super().update(dt, players)
+        
+        # Rotate shield
+        self.shield_angle += self.shield_rotation_speed * dt
+        self.shield_angle %= 360
+        
+    def is_protected_from_direction(self, attack_angle):
+        """Check if the shield protects from an attack from given angle"""
+        if not self.shield_active:
+            return False
+            
+        # Normalize angles
+        shield_start = (self.shield_angle - self.shield_arc / 2) % 360
+        shield_end = (self.shield_angle + self.shield_arc / 2) % 360
+        attack_angle = attack_angle % 360
+        
+        # Check if attack angle is within shield arc
+        if shield_start <= shield_end:
+            return shield_start <= attack_angle <= shield_end
+        else:  # Shield arc crosses 0 degrees
+            return attack_angle >= shield_start or attack_angle <= shield_end
+            
+    def take_damage(self, damage, player=None, attack_angle=None):
+        """Take damage with shield protection"""
+        if attack_angle is not None and self.is_protected_from_direction(attack_angle):
+            # Shield blocks the attack
+            return False
+            
+        # Normal damage
+        self.hp -= damage
+        
+        # Visual feedback
+        self.flash_timer = 0.1
+        self.flash_duration = 0.1
+        
+        if self.hp <= 0:
+            return True  # Enemy is dead
+            
+        return False
+        
+    def draw(self, screen):
+        """Draw shield enemy with visible shield"""
+        # Flash white when taking damage
+        if self.flash_timer > 0:
+            flash_surface = pygame.Surface((ENEMY_SIZE, ENEMY_SIZE))
+            flash_surface.fill(WHITE)
+            screen.blit(flash_surface, self.rect)
+        else:
+            screen.blit(self.image, self.rect)
+            
+        # Draw shield arc
+        if self.shield_active:
+            shield_radius = ENEMY_SIZE // 2 + 8
+            start_angle = math.radians(self.shield_angle - self.shield_arc / 2)
+            end_angle = math.radians(self.shield_angle + self.shield_arc / 2)
+            
+            # Draw shield arc as lines
+            num_lines = 8
+            for i in range(num_lines + 1):
+                angle = start_angle + (end_angle - start_angle) * (i / num_lines)
+                end_x = self.rect.centerx + math.cos(angle) * shield_radius
+                end_y = self.rect.centery + math.sin(angle) * shield_radius
+                pygame.draw.line(screen, (100, 200, 255), self.rect.center, (end_x, end_y), 3)
+            
+        # Draw health bar
+        if self.hp < self.max_hp:
+            bar_width = ENEMY_SIZE
+            bar_height = 4
+            bar_x = self.rect.x
+            bar_y = self.rect.y - 8
+            
+            # Background
+            pygame.draw.rect(screen, RED, (bar_x, bar_y, bar_width, bar_height))
+            
+            # Health
+            health_width = int((self.hp / self.max_hp) * bar_width)
+            pygame.draw.rect(screen, GREEN, (bar_x, bar_y, health_width, bar_height))
+
+
+class SummonerEnemy(Enemy):
+    """Enemy that summons smaller minions"""
+    def __init__(self, x, y, wave_number=1):
+        super().__init__(x, y, wave_number)
+        
+        # Summoner stats
+        self.speed = self.base_speed * 0.6  # Slow
+        self.max_hp = int(self.base_hp * 1.5) + (wave_number - 1) * ENEMY_HP_SCALING
+        self.hp = self.max_hp
+        self.damage = int((self.base_damage + (wave_number - 1) * ENEMY_DAMAGE_SCALING) * 0.7)
+        
+        # Summoning mechanics
+        self.summon_timer = 0
+        self.summon_cooldown = 5.0  # Summon every 5 seconds
+        self.max_minions = 3
+        self.minions = []
+        
+        # Different color - purple
+        self.image.fill((128, 0, 128))
+        
+    def update(self, dt, players):
+        """Update summoner with minion summoning"""
+        super().update(dt, players)
+        
+        # Clean up dead minions
+        self.minions = [minion for minion in self.minions if minion.hp > 0]
+        
+        # Summon minions
+        self.summon_timer += dt
+        if (self.summon_timer >= self.summon_cooldown and 
+            len(self.minions) < self.max_minions):
+            self.summon_minion()
+            self.summon_timer = 0
+            
+        # Update minions
+        for minion in self.minions:
+            minion.update(dt, players)
+            
+    def summon_minion(self):
+        """Summon a small minion"""
+        # Random position around summoner
+        angle = random.uniform(0, 2 * math.pi)
+        distance = 50
+        minion_x = self.rect.centerx + math.cos(angle) * distance
+        minion_y = self.rect.centery + math.sin(angle) * distance
+        
+        # Keep minion on screen
+        minion_x = max(20, min(SCREEN_WIDTH - 20, minion_x))
+        minion_y = max(20, min(SCREEN_HEIGHT - 20, minion_y))
+        
+        minion = MinionEnemy(minion_x, minion_y)
+        self.minions.append(minion)
+        
+    def draw(self, screen):
+        """Draw summoner and its minions"""
+        # Flash white when taking damage
+        if self.flash_timer > 0:
+            flash_surface = pygame.Surface((ENEMY_SIZE, ENEMY_SIZE))
+            flash_surface.fill(WHITE)
+            screen.blit(flash_surface, self.rect)
+        else:
+            screen.blit(self.image, self.rect)
+            
+        # Draw minions
+        for minion in self.minions:
+            minion.draw(screen)
+            
+        # Draw health bar
+        if self.hp < self.max_hp:
+            bar_width = ENEMY_SIZE
+            bar_height = 4
+            bar_x = self.rect.x
+            bar_y = self.rect.y - 8
+            
+            # Background
+            pygame.draw.rect(screen, RED, (bar_x, bar_y, bar_width, bar_height))
+            
+            # Health
+            health_width = int((self.hp / self.max_hp) * bar_width)
+            pygame.draw.rect(screen, GREEN, (bar_x, bar_y, health_width, bar_height))
+
+
+class MinionEnemy(Enemy):
+    """Small minion summoned by SummonerEnemy"""
+    def __init__(self, x, y):
+        super().__init__(x, y, 1)  # Always wave 1 stats
+        
+        # Minion stats - small and weak
+        self.speed = self.base_speed * 1.2
+        self.max_hp = int(self.base_hp * 0.3)
+        self.hp = self.max_hp
+        self.damage = int(self.base_damage * 0.5)
+        self.xp_reward = ENEMY_XP_REWARD // 3  # Less XP
+        
+        # Smaller size
+        self.image = pygame.Surface((ENEMY_SIZE // 2, ENEMY_SIZE // 2))
+        self.image.fill((200, 100, 200))  # Light purple
+        self.rect = self.image.get_rect()
+        self.rect.center = (x, y)
+        
+        # Short lifespan
+        self.lifetime = 15.0  # Disappear after 15 seconds
+        
+    def update(self, dt, players):
+        """Update minion with lifetime"""
+        super().update(dt, players)
+        
+        self.lifetime -= dt
+        if self.lifetime <= 0:
+            self.hp = 0  # Die when lifetime expires
 
 
 class XPOrb(pygame.sprite.Sprite):
