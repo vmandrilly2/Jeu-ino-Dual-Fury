@@ -744,7 +744,9 @@ class SniperEnemy(Enemy):
         
         if self.target_player:
             # Snipers don't move much, they prefer to stay at distance
-            distance = self.distance_to_player(self.target_player)\n            if distance < 150:  # Too close, back away\n                self.move_away_from_target(dt)\n            elif distance > 300:  # Too far, slowly approach\n                effective_speed = self.speed * 0.5 * self.slow_factor\n                dx = self.target_player.rect.centerx - self.rect.centerx\n                dy = self.target_player.rect.centery - self.rect.centery\n                dist = math.sqrt(dx * dx + dy * dy)\n                if dist > 0:\n                    dx /= dist\n                    dy /= dist\n                    self.velocity.x = dx * effective_speed\n                    self.velocity.y = dy * effective_speed\n                    self.rect.x += self.velocity.x * dt\n                    self.rect.y += self.velocity.y * dt
+            distance = self.distance_to_player(self.target_player)
+            if distance < 150:  # Too close, back away
+                self.move_away_from_target(dt)
             
             # Handle aiming and shooting
             self.shoot_timer += dt
@@ -799,12 +801,19 @@ class SniperEnemy(Enemy):
         
     def shoot_precise_shot(self):
         """Shoot a high-damage, fast projectile"""
-        if self.aim_target:
+        if self.aim_target and self.target_player:
+            dx = self.aim_target[0] - self.rect.centerx
+            dy = self.aim_target[1] - self.rect.centery
+            distance = math.sqrt(dx * dx + dy * dy)
+            speed = PROJECTILE_SPEED * 2.0
+            time_to_target = distance / speed if speed > 0 else 0
+            predicted_x = self.aim_target[0] + self.target_player.velocity.x * time_to_target
+            predicted_y = self.aim_target[1] + self.target_player.velocity.y * time_to_target
             projectile = Projectile(
                 self.rect.centerx, self.rect.centery,
-                self.aim_target[0], self.aim_target[1],
-                speed=PROJECTILE_SPEED * 2.0,  # Very fast
-                damage=self.damage,  # Full damage
+                predicted_x, predicted_y,
+                speed=speed,
+                damage=self.damage,
                 color=(255, 255, 0)  # Yellow projectiles
             )
             self.projectiles.append(projectile)

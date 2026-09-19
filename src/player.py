@@ -598,15 +598,19 @@ class Player(pygame.sprite.Sprite):
                 
     def take_damage(self, damage, attacker=None):
         """Take damage with invincibility frames"""
+        print(f"Debug: take_damage called for player {self.player_id} with damage {damage}")
         if not self.is_alive or self.invincible_time > 0:
+            print("Debug: Damage ignored - not alive or invincible_time > 0")
             return False
-            
+        
         # Check for invincibility potion effect
         if self.invincible_timer > 0:
+            print("Debug: Damage ignored - invincible_timer > 0")
             return False
-            
+        
         stats = self.get_effective_stats()
         actual_damage = damage * (1 - stats['damage_reduction'])
+        print(f"Debug: Actual damage after reduction: {actual_damage}")
         
         # Handle mana shield
         if 'mana_shield' in self.skills and self.mana > 0:
@@ -621,6 +625,7 @@ class Player(pygame.sprite.Sprite):
             actual_damage = hp_damage + max(0, mana_damage - absorbed_damage)
         
         self.hp -= actual_damage
+        print(f"Debug: HP after damage: {self.hp}")
         self.invincible_time = PLAYER_INVINCIBILITY_TIME
         
         # Check for death and phoenix feather
@@ -636,6 +641,7 @@ class Player(pygame.sprite.Sprite):
             attacker.apply_slow(effect['armor_slow'], effect['armor_slow_duration'])
         
         if self.hp <= 0:
+            print("Debug: Player died, setting hp to 0 and is_alive to False")
             self.hp = 0
             self.is_alive = False
             

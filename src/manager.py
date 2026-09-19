@@ -443,9 +443,13 @@ class GameManager:
                 for player in players:
                     if player.is_alive and projectile.collides_with_player(player):
                         # Player takes damage from projectile
+
+                        print(f"Debug: Enemy projectile collision detected with player {player.player_id}, damage: {projectile.damage}, from enemy type: {type(enemy).__name__}")
                         if player.take_damage(projectile.damage):
-                            pass  # Player took damage
-                        
+                            print("Debug: Damage applied to player")
+                        else:
+                            print("Debug: Damage not applied to player")
+
                         # Remove projectile after hit
                         enemy.projectiles.remove(projectile)
                         break
